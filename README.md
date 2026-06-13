@@ -1,31 +1,40 @@
-# SupportVision — Real-Time Video Support Platform
+# AssistSphere — Real-Time Video Support Platform
 
-A full-stack video calling platform for customer support teams. All media routes through a self-hosted **mediasoup SFU** — no third-party video SDKs.
+A full-stack video calling platform for customer support teams, built for the AtomQuest Hackathon 1.0. All media routes through a self-hosted **mediasoup SFU** — no third-party video SDKs.
 
 ## Features
 
-### Core (Must-Have)
+### Core Capabilities (Section 2)
 - **Session Management** — Agents create sessions, customers join via shareable invite link
-- **Server-Routed Video/Audio** — mediasoup SFU (not peer-to-peer)
+- **Server-Routed Video/Audio** — Custom WebRTC via mediasoup SFU (not peer-to-peer)
 - **In-Call Chat** — Real-time messaging persisted to PostgreSQL
-- **Role-Based Access** — Agent vs Customer with JWT enforcement
+- **Role-Based Access** — Agent vs Customer with strict JWT enforcement
 
-### Bonus
+### Bonus Requirements Met (Section 3)
 - **Call Recording** — Agent start/stop with status tracking (Processing → Ready)
-- **File Sharing** — Upload images, PDFs, documents in chat
-- **Reconnect Handling** — 30-second grace window for seamless reconnection
-- **Admin Dashboard** — Live sessions, history, force-end, event logs
-- **Observability** — Prometheus metrics at `/metrics`
+- **File Sharing** — Upload images, PDFs, documents natively inside the chat
+- **Reconnect Handling** — 30-second grace window for seamless network drop reconnection
+- **Admin Dashboard** — View live sessions, session history, event logs, and force-end active calls
+- **Observability** — Prometheus metrics exposed at `/metrics`
+
+### Additional Features Built
+- **Dynamic Layout Engine** — Zoom/Meet-style responsive grid layouts that adapt to the number of participants.
+- **Screen Sharing & Presentation Stage** — A dedicated 75% presentation stage split away from the 25% camera filmstrip.
+- **Interactive Tools** — Users can "Raise Hand" and send emoji sticker reactions in real-time.
+- **Post-Call Summary** — Dedicated page for post-session transcript review, participant stats, and recording download.
+- **Professional UI/UX** — Clean, responsive interface featuring native CSS-variable driven Light/Dark modes.
+- **High Availability Backend** — Configured with PM2 for zero-downtime restarts and robust persistence on Oracle Cloud.
+- **User Accounts** — Agents and Customers can optionally register and log in to persist their identities across sessions.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | Frontend | Next.js 15, React 19, Tailwind CSS 4 |
-| Backend | Node.js, Express, Socket.io |
+| Backend | Node.js, Express, Socket.io, PM2 |
 | Media Server | mediasoup (SFU) |
-| Database | PostgreSQL (Neon) |
-| Auth | JWT |
+| Database | PostgreSQL (Neon) via Prisma ORM |
+| Auth | Custom JWT Implementation |
 
 ## Quick Start
 
@@ -49,10 +58,10 @@ Edit `backend/.env`:
 ```env
 DATABASE_URL="postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require"
 JWT_SECRET="your-long-random-secret"
-MEDIASOUP_ANNOUNCED_IP=127.0.0.1
+MEDIASOUP_ANNOUNCED_IP="127.0.0.1" # Set to your Cloud Server's Public IP for production
 ```
 
-> **Windows note:** Set `MEDIASOUP_ANNOUNCED_IP` to your local IP if calls fail to connect.
+> **Note:** Set `MEDIASOUP_ANNOUNCED_IP` to your public IP if deploying to a cloud server, or your local LAN IP if testing across devices on the same network.
 
 ### 3. Configure Frontend
 
@@ -78,16 +87,15 @@ npm run dev
 
 ## Usage Flow
 
-1. **Agent** → Go to `/agent` → Enter name + agent secret → Create session
+1. **Agent** → Go to `/agent` → Enter name (or log in) → Create session
 2. **Copy invite link** → Share with customer
-3. **Customer** → Opens link → Enters name → Joins video call
-4. Both parties see/hear each other, chat, share files
-5. **Agent** ends call → Session history saved
+3. **Customer** → Opens link → Enters name → Joins video call instantly (no downloads)
+4. Both parties see/hear each other, chat, share files, and can use screen sharing
+5. **Agent** ends call → Both are redirected to the Post-Call Summary where chat history and recordings are accessible
 
 ### Default Credentials
 | Role | Credentials |
 |------|-------------|
-| Agent Secret | `agent-secret-key` |
 | Admin | `admin` / `admin123` |
 
 ## API Endpoints
@@ -105,6 +113,10 @@ npm run dev
 ## Architecture
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for system design diagram and details.
+
+## Known Limitations
+- Recording is a client-side composite (agent browser) rather than a server-side FFmpeg pipeline.
+- No TURN server is configured, meaning it depends on the standard SFU NAT traversal capabilities.
 
 ## License
 
