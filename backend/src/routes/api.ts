@@ -121,15 +121,12 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     }
   });
 
-  // Agent authentication (legacy shared secret)
+  // Agent authentication (no secret required)
   router.post('/auth/agent', async (req, res) => {
     try {
-      const { name, secret } = req.body;
+      const { name } = req.body;
       if (!name?.trim()) {
         return res.status(400).json({ error: 'Name is required' });
-      }
-      if (secret !== config.agentSecret) {
-        return res.status(403).json({ error: 'Invalid agent credentials' });
       }
       const token = signToken({
         sub: `agent-${Date.now()}`,

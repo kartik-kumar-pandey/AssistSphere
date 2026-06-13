@@ -19,7 +19,6 @@ interface SessionRow {
 export default function AgentPage() {
   const router = useRouter();
   const [name, setName] = useState('');
-  const [secret, setSecret] = useState('agent-secret-key');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [agentToken, setAgentToken] = useState('');
@@ -63,7 +62,7 @@ export default function AgentPage() {
       } else {
         const auth = await apiFetch<{ token: string; name: string }>('/auth/agent', {
           method: 'POST',
-          body: JSON.stringify({ name, secret }),
+          body: JSON.stringify({ name }),
         });
         token = auth.token;
         agentName = auth.name;
@@ -122,9 +121,6 @@ export default function AgentPage() {
           <Card glow>
             <form onSubmit={handleAuth} className="space-y-5">
               <Input id="name" label="Your name" placeholder="Sarah Chen" value={name} onChange={(e) => setName(e.target.value)} required disabled={!!loggedInUser} />
-              {!loggedInUser && (
-                <Input id="secret" label="Agent secret" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} required />
-              )}
               {loggedInUser && (
                 <p className="text-sm text-indigo-600 bg-indigo-50 rounded-xl px-3 py-2">
                   Signed in as {loggedInUser.name}
