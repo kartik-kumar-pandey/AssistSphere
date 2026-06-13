@@ -37,36 +37,42 @@ function VideoTile({
       return;
     }
 
-    const unmuteCleanups: (() => void)[] = [];
+    const cleanups: (() => void)[] = [];
+    let rafId: number;
 
     const attachMedia = () => {
       const videoTrack = stream.getVideoTracks()[0];
 
       if (videoEl) {
         if (videoTrack && videoTrack.readyState !== 'ended') {
-          const videoStream = new MediaStream([videoTrack]);
-          videoEl.srcObject = videoStream;
+          videoEl.srcObject = new MediaStream([videoTrack]);
+          videoEl.play().catch(() => setNeedsInteraction(true));
 
-          // Use loadedmetadata to detect when actual video frames arrive
-          const onMeta = () => setHasVideo(true);
-          videoEl.addEventListener('loadedmetadata', onMeta, { once: true });
-          unmuteCleanups.push(() => videoEl.removeEventListener('loadedmetadata', onMeta));
+          // Poll via rAF until the video element actually has frames
+          cancelAnimationFrame(rafId);
+          const checkVideo = () => {
+            // readyState >= 2 means HAVE_CURRENT_DATA (actual frames available)
+            if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+              setHasVideo(true);
+            } else {
+              rafId = requestAnimationFrame(checkVideo);
+            }
+          };
+          rafId = requestAnimationFrame(checkVideo);
+          cleanups.push(() => cancelAnimationFrame(rafId));
 
-          // Also handle the case where track starts muted (mediasoup initial state)
+          // Also catch the 'playing' event as a fast-path
+          const onPlaying = () => setHasVideo(true);
+          videoEl.addEventListener('playing', onPlaying);
+          cleanups.push(() => videoEl.removeEventListener('playing', onPlaying));
+
+          // Resume when track unmutes
           const onUnmute = () => {
-            setHasVideo(true);
             videoEl.play().catch(() => {});
+            setHasVideo(true);
           };
           videoTrack.addEventListener('unmute', onUnmute);
-          unmuteCleanups.push(() => videoTrack.removeEventListener('unmute', onUnmute));
-
-          // If track is already live/unmuted, set hasVideo immediately
-          if (!videoTrack.muted) setHasVideo(true);
-
-          videoEl
-            .play()
-            .then(() => setNeedsInteraction(false))
-            .catch(() => setNeedsInteraction(true));
+          cleanups.push(() => videoTrack.removeEventListener('unmute', onUnmute));
         } else {
           videoEl.srcObject = null;
           setHasVideo(false);
@@ -91,7 +97,7 @@ function VideoTile({
     return () => {
       stream.removeEventListener('addtrack', attachMedia);
       stream.removeEventListener('removetrack', attachMedia);
-      unmuteCleanups.forEach((fn) => fn());
+      cleanups.forEach((fn) => fn());
     };
   }, [stream, isLocal]);
 
