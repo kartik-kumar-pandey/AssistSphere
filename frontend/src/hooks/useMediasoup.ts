@@ -212,6 +212,8 @@ export function useMediasoup({
           stream.removeTrack(consumer.track);
           if (stream.getTracks().length === 0) {
             targetRef.current.delete(peerId);
+          } else {
+            targetRef.current.set(peerId, new MediaStream(stream.getTracks()));
           }
         }
         consumer.close();
@@ -288,6 +290,7 @@ export function useMediasoup({
             sameKind.forEach((t) => existing.removeTrack(t));
           }
           existing.addTrack(mediasoupConsumer.track);
+          targetRef.current.set(peerId, new MediaStream(existing.getTracks()));
         } else {
           targetRef.current.set(peerId, new MediaStream([mediasoupConsumer.track]));
         }
