@@ -82,7 +82,7 @@ export default function JoinPage() {
           <div className="w-9 h-9 rounded-xl btn-primary flex items-center justify-center">
             <Video className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-slate-900">SupportVision</span>
+          <span className="font-bold text-slate-900">AssistSphere</span>
         </div>
       </nav>
 

@@ -15,7 +15,7 @@ export function HeroPreview() {
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
           </div>
-          <span className="text-[10px] text-muted font-mono ml-2">supportvision.app/call/live</span>
+          <span className="text-[10px] text-muted font-mono ml-2">assistsphere.app/call/live</span>
           <span className="ml-auto flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live

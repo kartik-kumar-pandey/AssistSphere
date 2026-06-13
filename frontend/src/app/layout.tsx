@@ -14,7 +14,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SupportVision — Video Support Platform',
+  title: 'AssistSphere — Video Support Platform',
   description: 'Enterprise real-time video support with server-routed media',
 };
 

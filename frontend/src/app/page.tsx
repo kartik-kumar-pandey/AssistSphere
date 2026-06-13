@@ -37,7 +37,7 @@ export default function HomePage() {
             <div className="w-10 h-10 rounded-xl btn-primary flex items-center justify-center">
               <Video className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold">SupportVision</span>
+            <span className="text-lg font-bold">AssistSphere</span>
           </div>
           <div className="flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
             <ThemeToggle />

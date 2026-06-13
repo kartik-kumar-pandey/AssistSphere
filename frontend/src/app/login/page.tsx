@@ -50,7 +50,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Sign in</h1>
-            <p className="text-slate-500 text-sm">Access your SupportVision account</p>
+            <p className="text-slate-500 text-sm">Access your AssistSphere account</p>
           </div>
         </div>
         <Card glow>
