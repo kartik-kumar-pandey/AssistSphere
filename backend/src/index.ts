@@ -22,14 +22,26 @@ async function main() {
 
   const io = new Server(server, {
     cors: {
-      origin: config.frontendUrl,
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const allowed =
+          origin === config.frontendUrl ||
+          /\.vercel\.app$/.test(origin) ||
+          /^http:\/\/localhost/.test(origin);
+        callback(allowed ? null : new Error('Not allowed by CORS'), allowed);
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
     maxHttpBufferSize: 1e7,
   });
 
-  app.use(cors({ origin: config.frontendUrl, credentials: true }));
+  const allowedOrigins = [
+    config.frontendUrl,
+    /\.vercel\.app$/,      // all Vercel preview & production URLs
+    /^http:\/\/localhost/,  // local development
+  ];
+  app.use(cors({ origin: allowedOrigins, credentials: true }));
   app.use(express.json());
 
   app.get('/metrics', async (_req, res) => {
