@@ -451,7 +451,7 @@ export function useMediasoup({
 
         const sock = io(WS_URL, {
           auth: { token },
-          transports: ['websocket', 'polling'],
+          transports: ['polling', 'websocket'],  // polling first is more reliable through Nginx proxy
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 2000,

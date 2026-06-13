@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
+// WS_URL is derived from API_URL by stripping the /api suffix — only one env var needed on Vercel
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || API_URL.replace(/\/api$/, '');
 
 export async function apiFetch<T>(
   path: string,
