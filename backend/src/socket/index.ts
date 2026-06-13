@@ -130,7 +130,11 @@ async function handleSessionJoin(
     cancelDisconnectByParticipant(user.participantId);
   }
 
-  removePeer(sessionId, peerId);
+  const closedProducers = removePeer(sessionId, peerId);
+  for (const { producerId } of closedProducers) {
+    socket.to(sessionId).emit('producerClosed', { peerId, producerId });
+  }
+
   await createRoom(sessionId);
   addPeer(sessionId, peerId, user.name, user.role);
 

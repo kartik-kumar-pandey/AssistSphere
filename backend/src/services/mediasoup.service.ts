@@ -76,7 +76,9 @@ export async function initMediasoup() {
     process.exit(1);
   });
 
-  console.log('mediasoup worker started');
+  console.log(
+    `mediasoup worker started (announcedIp=${config.mediasoup.announcedIp}, ports=${config.mediasoup.minPort}-${config.mediasoup.maxPort})`
+  );
 }
 
 export function getOrCreateRoom(sessionId: string): Room {
@@ -141,12 +143,20 @@ export function addPeer(sessionId: string, peerId: string, name: string, role: s
   return peer;
 }
 
-export function removePeer(sessionId: string, peerId: string) {
+export function removePeer(
+  sessionId: string,
+  peerId: string
+): { producerId: string; kind: string }[] {
   const room = rooms.get(sessionId);
-  if (!room) return;
+  if (!room) return [];
 
   const peer = room.peers.get(peerId);
-  if (!peer) return;
+  if (!peer) return [];
+
+  const closedProducers = Array.from(peer.producers.entries()).map(([producerId, producer]) => ({
+    producerId,
+    kind: producer.kind,
+  }));
 
   for (const transport of peer.transports.values()) {
     transport.close();
@@ -156,6 +166,8 @@ export function removePeer(sessionId: string, peerId: string) {
   if (room.peers.size === 0) {
     destroyRoom(sessionId);
   }
+
+  return closedProducers;
 }
 
 export async function createWebRtcTransport(sessionId: string, peerId: string) {
@@ -164,7 +176,7 @@ export async function createWebRtcTransport(sessionId: string, peerId: string) {
   if (!peer) throw new Error('Peer not found');
 
   const transport = await room.router.createWebRtcTransport({
-    listenIps: [{ ip: '0.0.0.0', announcedIp: config.mediasoup.announcedIp }],
+    listenIps: [{ ip: config.mediasoup.listenIp, announcedIp: config.mediasoup.announcedIp }],
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,
@@ -251,6 +263,7 @@ export async function consume(
     producerId,
     rtpCapabilities: rtpCapabilities as never,
     paused: true,
+    enableRtx: true,
   });
 
   peer.consumers.set(consumer.id, consumer);
@@ -280,6 +293,14 @@ export async function resumeConsumer(sessionId: string, peerId: string, consumer
   if (!consumer) throw new Error('Consumer not found');
 
   await consumer.resume();
+
+  if (consumer.kind === 'video') {
+    try {
+      await consumer.requestKeyFrame();
+    } catch {
+      // keyframe may not be available immediately
+    }
+  }
 }
 
 export function getRouterRtpCapabilities(sessionId: string) {

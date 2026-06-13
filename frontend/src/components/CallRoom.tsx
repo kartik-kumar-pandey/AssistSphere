@@ -123,7 +123,11 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     );
   }
 
-  const participantCount = 1 + peers.length;
+  const remotePeerIds = new Set([
+    ...peers.map((p) => p.id),
+    ...remoteStreams.map((r) => r.peerId),
+  ]);
+  const participantCount = 1 + remotePeerIds.size;
 
   const allStreams = [
     { peerId: 'local', name, role, stream: localStream, isLocal: true },
@@ -181,7 +185,6 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                 stream={s.stream}
                 name={s.name}
                 role={s.role}
-                muted={s.isLocal}
                 isLocal={s.isLocal}
               />
             ))}
