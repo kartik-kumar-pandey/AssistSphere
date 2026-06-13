@@ -19,7 +19,17 @@ interface PeerInfo {
 interface RemoteStream {
   peerId: string;
   name: string;
+  role?: string;
   stream: MediaStream;
+  screenStream: MediaStream | null;
+}
+
+interface PendingProducer {
+  producerId: string;
+  peerId: string;
+  name: string;
+  role?: string;
+  source?: string;
 }
 
 interface RoomJoinedData {
@@ -28,18 +38,14 @@ interface RoomJoinedData {
   rtpCapabilities: object;
 }
 
-interface PendingProducer {
-  producerId: string;
-  peerId: string;
-  name: string;
-  role?: string;
-}
+type ProducerSource = 'audio' | 'camera' | 'screen';
 
 interface UseMediasoupOptions {
   token: string;
   onPeerJoined?: (peer: PeerInfo) => void;
   onPeerLeft?: (peerId: string) => void;
   onSessionEnded?: (reason: string) => void;
+  onKicked?: (reason: string) => void;
   onRecordingStatus?: (status: { status: string; recordingId?: string }) => void;
   onError?: (message: string) => void;
 }
@@ -103,6 +109,7 @@ export function useMediasoup({
   onPeerJoined,
   onPeerLeft,
   onSessionEnded,
+  onKicked,
   onRecordingStatus,
   onError,
 }: UseMediasoupOptions) {
@@ -114,38 +121,82 @@ export function useMediasoup({
   const consumersRef = useRef<Map<string, Consumer>>(new Map());
   const consumerByProducerRef = useRef<Map<string, Consumer>>(new Map());
   const producerPeerRef = useRef<Map<string, string>>(new Map());
+  const producerSourceRef = useRef<Map<string, ProducerSource>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerNamesRef = useRef<Map<string, string>>(new Map());
-  const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const remoteCameraStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const remoteScreenStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const consumedProducersRef = useRef<Set<string>>(new Set());
   const pendingProducersRef = useRef<PendingProducer[]>([]);
   const consumeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const ownPeerIdRef = useRef<string>('');
   const mediaReadyRef = useRef(false);
+  const sessionEndingRef = useRef(false);
   const emitRef = useRef<(event: string, data?: unknown) => Promise<unknown>>(() =>
     Promise.reject(new Error('Not ready'))
   );
 
-  const callbacksRef = useRef({ onPeerJoined, onPeerLeft, onSessionEnded, onRecordingStatus, onError });
-  callbacksRef.current = { onPeerJoined, onPeerLeft, onSessionEnded, onRecordingStatus, onError };
+  const callbacksRef = useRef({ onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError });
+  callbacksRef.current = { onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError };
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [connected, setConnected] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
+  const [screenSharing, setScreenSharing] = useState(false);
   const [peers, setPeers] = useState<PeerInfo[]>([]);
+  const [ownPeerId, setOwnPeerId] = useState('');
+  const hasJoinedRef = useRef(false);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+
+  function normalizePeer(data: { id?: string; peerId?: string; name: string; role: string }): PeerInfo | null {
+    const id = data.id || data.peerId;
+    if (!id) return null;
+    return { id, name: data.name, role: data.role };
+  }
+
+  const teardownMedia = useCallback(() => {
+    mediaReadyRef.current = false;
+    sendTransportRef.current?.close();
+    recvTransportRef.current?.close();
+    sendTransportRef.current = null;
+    recvTransportRef.current = null;
+    deviceRef.current = null;
+    for (const consumer of consumersRef.current.values()) consumer.close();
+    consumersRef.current.clear();
+    consumerByProducerRef.current.clear();
+    producerPeerRef.current.clear();
+    producerSourceRef.current.clear();
+    producersRef.current.clear();
+    consumedProducersRef.current.clear();
+    remoteCameraStreamsRef.current.clear();
+    remoteScreenStreamsRef.current.clear();
+    pendingProducersRef.current = [];
+    consumeQueueRef.current = Promise.resolve();
+    setRemoteStreams([]);
+    setLocalScreenStream(null);
+    setPeers([]);
+    setScreenSharing(false);
+    setMediaReady(false);
+  }, []);
 
   const syncRemoteStreams = useCallback(() => {
+    const peerIds = new Set([
+      ...remoteCameraStreamsRef.current.keys(),
+      ...remoteScreenStreamsRef.current.keys(),
+    ]);
     setRemoteStreams(
-      Array.from(remoteStreamsRef.current.entries())
-        .filter(([peerId]) => peerId !== ownPeerIdRef.current)
-        .map(([peerId, stream]) => ({
+      Array.from(peerIds)
+        .filter((peerId) => peerId !== ownPeerIdRef.current)
+        .map((peerId) => ({
           peerId,
           name: peerNamesRef.current.get(peerId) || 'Participant',
-          stream,
+          stream: remoteCameraStreamsRef.current.get(peerId) || new MediaStream(),
+          screenStream: remoteScreenStreamsRef.current.get(peerId) || null,
         }))
     );
   }, []);
@@ -154,11 +205,13 @@ export function useMediasoup({
     (peerId: string, producerId: string) => {
       const consumer = consumerByProducerRef.current.get(producerId);
       if (consumer) {
-        const stream = remoteStreamsRef.current.get(peerId);
+        const source = producerSourceRef.current.get(producerId) || 'camera';
+        const targetRef = source === 'screen' ? remoteScreenStreamsRef : remoteCameraStreamsRef;
+        const stream = targetRef.current.get(peerId);
         if (stream) {
           stream.removeTrack(consumer.track);
           if (stream.getTracks().length === 0) {
-            remoteStreamsRef.current.delete(peerId);
+            targetRef.current.delete(peerId);
           }
         }
         consumer.close();
@@ -166,6 +219,7 @@ export function useMediasoup({
         consumerByProducerRef.current.delete(producerId);
         consumedProducersRef.current.delete(producerId);
         producerPeerRef.current.delete(producerId);
+        producerSourceRef.current.delete(producerId);
       }
       syncRemoteStreams();
     },
@@ -173,23 +227,24 @@ export function useMediasoup({
   );
 
   const consumeProducer = useCallback(
-    async (producerId: string, peerId: string, name: string, role?: string) => {
+    async (
+      producerId: string,
+      peerId: string,
+      name: string,
+      role?: string,
+      source: ProducerSource = 'camera'
+    ) => {
       if (peerId === ownPeerIdRef.current) return;
       if (consumedProducersRef.current.has(producerId)) return;
 
       if (!deviceRef.current || !recvTransportRef.current) {
-        pendingProducersRef.current.push({ producerId, peerId, name, role });
+        pendingProducersRef.current.push({ producerId, peerId, name, role, source });
         return;
       }
 
       consumedProducersRef.current.add(producerId);
       peerNamesRef.current.set(peerId, name);
-      if (role) {
-        setPeers((prev) => {
-          if (prev.some((p) => p.id === peerId)) return prev;
-          return [...prev, { id: peerId, name, role }];
-        });
-      }
+      producerSourceRef.current.set(producerId, source);
 
       try {
         const response = (await emitRef.current('consume', {
@@ -198,19 +253,20 @@ export function useMediasoup({
           rtpCapabilities: deviceRef.current.rtpCapabilities,
         })) as { consumer: { id: string; kind: string; rtpParameters: object } };
 
+        const streamId = source === 'screen' ? `${peerId}-screen` : `${peerId}-camera`;
+
         const mediasoupConsumer = await recvTransportRef.current.consume({
           id: response.consumer.id,
           producerId,
           kind: response.consumer.kind as mediasoupClient.types.MediaKind,
           rtpParameters: response.consumer.rtpParameters as mediasoupClient.types.RtpParameters,
-          streamId: `${peerId}-av`,
+          streamId,
         });
 
         consumersRef.current.set(mediasoupConsumer.id, mediasoupConsumer);
         consumerByProducerRef.current.set(producerId, mediasoupConsumer);
         producerPeerRef.current.set(producerId, peerId);
 
-        // Server creates paused consumer — resume after client-side consume (demo pattern)
         await emitRef.current('resumeConsumer', { consumerId: mediasoupConsumer.id });
 
         if (mediasoupConsumer.paused) {
@@ -221,47 +277,39 @@ export function useMediasoup({
           mediasoupConsumer.track.enabled = true;
         }
 
-        setRemoteStreams((prev) => {
-          const existing = prev.find((s) => s.peerId === peerId);
-          if (existing) {
-            const tracks = existing.stream
-              .getTracks()
-              .filter((t) => t.kind !== mediasoupConsumer.track.kind);
-            tracks.push(mediasoupConsumer.track);
-            const newStream = new MediaStream(tracks);
-            remoteStreamsRef.current.set(peerId, newStream);
-            return prev.map((s) =>
-              s.peerId === peerId ? { ...s, name, stream: newStream } : s
-            );
+        const targetRef = source === 'screen' ? remoteScreenStreamsRef : remoteCameraStreamsRef;
+        const existing = targetRef.current.get(peerId);
+        if (existing) {
+          const tracks = existing
+            .getTracks()
+            .filter((t) => !(t.kind === mediasoupConsumer.track.kind && source !== 'screen' && t.kind === 'video'));
+          if (source !== 'screen') {
+            const sameKind = tracks.filter((t) => t.kind === mediasoupConsumer.track.kind);
+            sameKind.forEach((t) => existing.removeTrack(t));
           }
+          existing.addTrack(mediasoupConsumer.track);
+        } else {
+          targetRef.current.set(peerId, new MediaStream([mediasoupConsumer.track]));
+        }
 
-          const newStream = new MediaStream([mediasoupConsumer.track]);
-          remoteStreamsRef.current.set(peerId, newStream);
-          return [...prev, { peerId, name, stream: newStream }];
-        });
+        syncRemoteStreams();
 
-        console.log(
-          '[mediasoup] consuming producer',
-          producerId,
-          'from',
-          name,
-          mediasoupConsumer.kind,
-          'track:',
-          mediasoupConsumer.track.readyState,
-          mediasoupConsumer.track.muted ? 'muted' : 'live'
-        );
+        console.log('[mediasoup] consuming', source, 'from', name);
       } catch (err) {
         consumedProducersRef.current.delete(producerId);
+        producerSourceRef.current.delete(producerId);
         throw err;
       }
     },
-    []
+    [syncRemoteStreams]
   );
 
   const enqueueConsume = useCallback(
-    (producerId: string, peerId: string, name: string, role?: string) => {
+    (producerId: string, peerId: string, name: string, role?: string, source?: string) => {
+      const src: ProducerSource =
+        source === 'screen' ? 'screen' : source === 'audio' ? 'audio' : 'camera';
       consumeQueueRef.current = consumeQueueRef.current
-        .then(() => consumeProducer(producerId, peerId, name, role))
+        .then(() => consumeProducer(producerId, peerId, name, role, src))
         .catch((err) => {
           callbacksRef.current.onError?.(
             err instanceof Error ? err.message : 'Failed to consume stream'
@@ -275,22 +323,25 @@ export function useMediasoup({
     const pending = [...pendingProducersRef.current];
     pendingProducersRef.current = [];
     for (const p of pending) {
-      await consumeProducer(p.producerId, p.peerId, p.name, p.role);
+      const src: ProducerSource =
+        p.source === 'screen' ? 'screen' : p.source === 'audio' ? 'audio' : 'camera';
+      await consumeProducer(p.producerId, p.peerId, p.name, p.role, src);
     }
   }, [consumeProducer]);
 
   const setupMediasoup = useCallback(
     async (roomData: RoomJoinedData, stream: MediaStream) => {
       ownPeerIdRef.current = roomData.peerId;
+      setOwnPeerId(roomData.peerId);
 
       const device = new mediasoupClient.Device();
       await device.load({
         routerRtpCapabilities: roomData.rtpCapabilities as mediasoupClient.types.RtpCapabilities,
       });
       deviceRef.current = device;
-      setPeers(roomData.peers);
+      setPeers(roomData.peers.filter((p) => p.id));
       for (const peer of roomData.peers) {
-        peerNamesRef.current.set(peer.id, peer.name);
+        if (peer.id) peerNamesRef.current.set(peer.id, peer.name);
       }
 
       const recvResponse = (await emitRef.current('createTransport')) as {
@@ -310,7 +361,12 @@ export function useMediasoup({
 
       recvTransport.on('connectionstatechange', (state) => {
         console.log('[mediasoup] recv transport state:', state);
-        if (state === 'failed') {
+        if (
+          state === 'failed' &&
+          !sessionEndingRef.current &&
+          mediaReadyRef.current &&
+          socketRef.current?.connected
+        ) {
           callbacksRef.current.onError?.('Media receive connection failed — check MEDIASOUP_ANNOUNCED_IP');
         }
       });
@@ -330,15 +386,20 @@ export function useMediasoup({
           .catch(errback);
       });
 
-      sendTransport.on('produce', ({ kind, rtpParameters }, callback, errback) => {
-        emitRef.current('produce', { transportId: sendTransport.id, kind, rtpParameters })
+      sendTransport.on('produce', ({ kind, rtpParameters, appData }, callback, errback) => {
+        emitRef.current('produce', { transportId: sendTransport.id, kind, rtpParameters, appData })
           .then((res) => callback({ id: (res as { id: string }).id }))
           .catch(errback);
       });
 
       sendTransport.on('connectionstatechange', (state) => {
         console.log('[mediasoup] send transport state:', state);
-        if (state === 'failed') {
+        if (
+          state === 'failed' &&
+          !sessionEndingRef.current &&
+          mediaReadyRef.current &&
+          socketRef.current?.connected
+        ) {
           callbacksRef.current.onError?.('Media send connection failed — check MEDIASOUP_ANNOUNCED_IP');
         }
       });
@@ -350,18 +411,24 @@ export function useMediasoup({
         peerId: string;
         name: string;
         role: string;
+        source?: string;
       }[];
       for (const p of existingProducers) {
         if (p.peerId !== ownPeerIdRef.current) {
-          await consumeProducer(p.producerId, p.peerId, p.name, p.role);
+          const src: ProducerSource =
+            p.source === 'screen' ? 'screen' : p.source === 'audio' ? 'audio' : 'camera';
+          await consumeProducer(p.producerId, p.peerId, p.name, p.role, src);
         }
       }
       await flushPendingProducers();
 
-      for (const track of stream.getTracks()) {
-        const producer = await sendTransport.produce({ track });
-        producersRef.current.set(track.kind, producer);
-        console.log('[mediasoup] producing', track.kind);
+      for (const track of stream.getAudioTracks()) {
+        const producer = await sendTransport.produce({ track, appData: { source: 'audio' } });
+        producersRef.current.set('audio', producer);
+      }
+      for (const track of stream.getVideoTracks()) {
+        const producer = await sendTransport.produce({ track, appData: { source: 'camera' } });
+        producersRef.current.set('video', producer);
       }
 
       setMediaReady(true);
@@ -401,7 +468,30 @@ export function useMediasoup({
           mediaReadyRef.current = false;
         });
 
-        sock.on('peer:joined', (peer: PeerInfo) => {
+        sock.on('connect', async () => {
+          if (!hasJoinedRef.current || aborted) return;
+          try {
+            setConnected(true);
+            teardownMedia();
+            const stream = localStreamRef.current;
+            if (!stream) return;
+            const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean }>(
+              sock,
+              'room:join'
+            );
+            if (aborted) return;
+            await setupMediasoup(roomResponse, stream);
+            console.log('[mediasoup] reconnected and rejoined room');
+          } catch (err) {
+            callbacksRef.current.onError?.(
+              err instanceof Error ? err.message : 'Failed to reconnect media'
+            );
+          }
+        });
+
+        sock.on('peer:joined', (data: { id?: string; peerId?: string; name: string; role: string }) => {
+          const peer = normalizePeer(data);
+          if (!peer || peer.id === ownPeerIdRef.current) return;
           peerNamesRef.current.set(peer.id, peer.name);
           setPeers((prev) => (prev.some((p) => p.id === peer.id) ? prev : [...prev, peer]));
           callbacksRef.current.onPeerJoined?.(peer);
@@ -415,28 +505,39 @@ export function useMediasoup({
               removeConsumerForProducer(peerId, producerId);
             }
           }
-          remoteStreamsRef.current.delete(peerId);
+          remoteCameraStreamsRef.current.delete(peerId);
+          remoteScreenStreamsRef.current.delete(peerId);
           syncRemoteStreams();
           callbacksRef.current.onPeerLeft?.(peerId);
         });
 
-        sock.on('newProducer', ({ producerId, peerId, name, role }: PendingProducer) => {
+        sock.on('newProducer', ({ producerId, peerId, name, role, source }: PendingProducer) => {
           if (peerId === ownPeerIdRef.current) return;
-          console.log('[mediasoup] newProducer detected', producerId, 'from', name);
-          enqueueConsume(producerId, peerId, name, role);
+          console.log('[mediasoup] newProducer', producerId, source, 'from', name);
+          enqueueConsume(producerId, peerId, name, role, source);
         });
 
         sock.on('producerClosed', ({ peerId, producerId }: { peerId: string; producerId: string }) => {
           if (producerId) {
             removeConsumerForProducer(peerId, producerId);
           } else {
-            remoteStreamsRef.current.delete(peerId);
+            remoteCameraStreamsRef.current.delete(peerId);
+            remoteScreenStreamsRef.current.delete(peerId);
             syncRemoteStreams();
           }
         });
 
         sock.on('session:ended', ({ reason }: { reason: string }) => {
+          sessionEndingRef.current = true;
+          teardownMedia();
           callbacksRef.current.onSessionEnded?.(reason);
+        });
+
+        sock.on('kicked', ({ reason }: { reason: string }) => {
+          sessionEndingRef.current = true;
+          mediaReadyRef.current = false;
+          teardownMedia();
+          callbacksRef.current.onKicked?.(reason);
         });
 
         sock.on('recording:status', (status: { status: string; recordingId?: string }) => {
@@ -454,6 +555,7 @@ export function useMediasoup({
 
         console.log('[mediasoup] joined room, peers:', roomResponse.peers?.length ?? 0);
         await setupMediasoup(roomResponse, stream);
+        hasJoinedRef.current = true;
       } catch (err) {
         if (!aborted) {
           callbacksRef.current.onError?.(err instanceof Error ? err.message : 'Failed to connect');
@@ -475,6 +577,7 @@ export function useMediasoup({
       consumerByProducerRef.current.clear();
       producerPeerRef.current.clear();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -492,6 +595,7 @@ export function useMediasoup({
   }, [audioEnabled, videoEnabled]);
 
   const toggleVideo = useCallback(() => {
+    if (screenSharing) return;
     const producer = producersRef.current.get('video');
     if (producer) {
       if (videoEnabled) producer.pause();
@@ -499,12 +603,60 @@ export function useMediasoup({
       setVideoEnabled(!videoEnabled);
       socketRef.current?.emit('mediaState', { audio: audioEnabled, video: !videoEnabled });
     }
-  }, [audioEnabled, videoEnabled]);
+  }, [audioEnabled, videoEnabled, screenSharing]);
 
-  const endSession = useCallback(
-    () => emitRef.current('session:end') as Promise<{ success: boolean }>,
-    []
-  );
+  const stopScreenShare = useCallback(async () => {
+    const screenProducer = producersRef.current.get('screen');
+    if (screenProducer) {
+      socketRef.current?.emit('closeProducer', { producerId: screenProducer.id });
+      screenProducer.close();
+      producersRef.current.delete('screen');
+    }
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current = null;
+    setLocalScreenStream(null);
+    setScreenSharing(false);
+  }, []);
+
+  const toggleScreenShare = useCallback(async () => {
+    const sendTransport = sendTransportRef.current;
+    if (!sendTransport) return;
+
+    if (screenSharing) {
+      await stopScreenShare();
+      return;
+    }
+
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 30 },
+        audio: false,
+      });
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) return;
+
+      screenTrack.onended = () => {
+        void stopScreenShare();
+      };
+
+      const producer = await sendTransport.produce({
+        track: screenTrack,
+        appData: { source: 'screen' },
+      });
+      producersRef.current.set('screen', producer);
+      screenStreamRef.current = screenStream;
+      setLocalScreenStream(new MediaStream([screenTrack]));
+      setScreenSharing(true);
+    } catch {
+      // user cancelled picker
+    }
+  }, [screenSharing, stopScreenShare]);
+
+  const endSession = useCallback(() => {
+    sessionEndingRef.current = true;
+    mediaReadyRef.current = false;
+    return emitRef.current('session:end') as Promise<{ success: boolean }>;
+  }, []);
 
   const startRecording = useCallback(
     () => emitRef.current('recording:start') as Promise<{ recording: { id: string } }>,
@@ -517,6 +669,8 @@ export function useMediasoup({
   );
 
   const leave = useCallback(() => {
+    sessionEndingRef.current = true;
+    mediaReadyRef.current = false;
     socketRef.current?.emit('leave');
     for (const consumer of consumersRef.current.values()) {
       consumer.close();
@@ -525,6 +679,7 @@ export function useMediasoup({
     consumerByProducerRef.current.clear();
     producerPeerRef.current.clear();
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     socketRef.current?.disconnect();
     socketRef.current = null;
     setSocket(null);
@@ -533,20 +688,36 @@ export function useMediasoup({
     mediaReadyRef.current = false;
   }, []);
 
+  const kickPeer = useCallback((targetPeerId: string) => {
+    return new Promise<{ success: boolean }>((resolve, reject) => {
+      const sock = socketRef.current;
+      if (!sock?.connected) return reject(new Error('Not connected'));
+      sock.emit('kickPeer', { targetPeerId }, (res: { success: boolean; error?: string }) => {
+        if (res?.success) resolve(res);
+        else reject(new Error(res?.error || 'Failed to remove participant'));
+      });
+    });
+  }, []);
+
   return {
     connected,
     mediaReady,
     localStream,
+    localScreenStream,
     remoteStreams,
     peers,
+    ownPeerId,
     audioEnabled,
     videoEnabled,
+    screenSharing,
     toggleAudio,
     toggleVideo,
+    toggleScreenShare,
     endSession,
     startRecording,
     stopRecording,
     leave,
+    kickPeer,
     socket,
   };
 }

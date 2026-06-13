@@ -2,20 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { Hand, Maximize2, Minimize2 } from 'lucide-react';
 
 function VideoTile({
   stream,
   name,
   role,
   isLocal,
+  handRaised,
+  sticker,
+  maximized,
+  onToggleMaximize,
 }: {
   stream: MediaStream | null;
   name: string;
   role: string;
   isLocal?: boolean;
+  handRaised?: boolean;
+  sticker?: string | null;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
   const [needsInteraction, setNeedsInteraction] = useState(false);
 
@@ -31,23 +41,18 @@ function VideoTile({
 
     const attachMedia = () => {
       const videoTrack = stream.getVideoTracks()[0];
-      setHasVideo(Boolean(videoTrack));
+      setHasVideo(Boolean(videoTrack && videoTrack.readyState !== 'ended'));
 
       if (videoEl) {
-        if (videoTrack) {
+        if (videoTrack && videoTrack.readyState !== 'ended') {
           const videoStream = new MediaStream([videoTrack]);
           videoEl.srcObject = videoStream;
           videoEl
             .play()
             .then(() => setNeedsInteraction(false))
-            .catch((err) => {
-              console.warn('[VideoTile] video play failed:', err);
-              setNeedsInteraction(true);
-            });
+            .catch(() => setNeedsInteraction(true));
 
-          const onUnmute = () => {
-            videoEl.play().catch(() => {});
-          };
+          const onUnmute = () => videoEl.play().catch(() => {});
           videoTrack.addEventListener('unmute', onUnmute);
           unmuteCleanups.push(() => videoTrack.removeEventListener('unmute', onUnmute));
         } else {
@@ -59,7 +64,7 @@ function VideoTile({
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioEl.srcObject = new MediaStream([audioTrack]);
-          audioEl.play().catch((err) => console.warn('[VideoTile] audio play failed:', err));
+          audioEl.play().catch(() => {});
         } else {
           audioEl.srcObject = null;
         }
@@ -77,52 +82,91 @@ function VideoTile({
     };
   }, [stream, isLocal]);
 
-  const handleUnlock = () => {
-    videoRef.current?.play().catch(() => {});
-    audioRef.current?.play().catch(() => {});
-    setNeedsInteraction(false);
-  };
+  function handleFullscreen() {
+    if (onToggleMaximize) {
+      onToggleMaximize();
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      el.requestFullscreen().catch(() => {});
+    }
+  }
 
   return (
-    <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-900 border border-white/10 group">
+    <div
+      ref={containerRef}
+      className="relative w-full h-full min-h-[120px] rounded-2xl overflow-hidden bg-slate-900 shadow-md ring-1 ring-slate-200/60"
+    >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
         className={cn(
-          'w-full h-full object-cover bg-slate-900',
-          hasVideo ? 'block' : 'hidden'
+          'absolute inset-0 w-full h-full object-cover',
+          !hasVideo && 'opacity-0 pointer-events-none'
         )}
       />
       {!isLocal && <audio ref={audioRef} autoPlay playsInline className="hidden" />}
+
       {!hasVideo && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-          <div className="w-20 h-20 rounded-full bg-indigo-600/30 flex items-center justify-center text-2xl font-bold text-indigo-300">
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+          <div className="w-16 h-16 rounded-full bg-white shadow-md flex items-center justify-center text-xl font-bold text-indigo-600">
             {name.charAt(0).toUpperCase()}
           </div>
         </div>
       )}
+
       {needsInteraction && !isLocal && hasVideo && (
         <button
           type="button"
-          onClick={handleUnlock}
-          className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-sm font-medium hover:bg-black/70 z-10"
+          onClick={() => {
+            videoRef.current?.play().catch(() => {});
+            setNeedsInteraction(false);
+          }}
+          className="absolute inset-0 flex items-center justify-center bg-black/40 text-white text-sm font-medium z-10"
         >
-          Click to play video
+          Tap to play video
         </button>
       )}
-      <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/70 to-transparent">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">
-            {name} {isLocal && '(You)'}
+
+      <button
+        type="button"
+        onClick={handleFullscreen}
+        className="absolute top-2 left-2 z-20 p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
+        title={maximized ? 'Exit maximize' : 'Maximize'}
+      >
+        {maximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+      </button>
+
+      {sticker && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl animate-bounce z-20 pointer-events-none drop-shadow-lg">
+          {sticker}
+        </div>
+      )}
+
+      {handRaised && (
+        <div className="absolute top-3 right-3 z-20 bg-amber-400 text-amber-950 rounded-full p-2 shadow-lg animate-pulse">
+          <Hand className="w-5 h-5" />
+        </div>
+      )}
+
+      <div className="absolute bottom-0 inset-x-0 px-3 py-2.5 bg-gradient-to-t from-black/60 via-black/30 to-transparent">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-white drop-shadow-sm truncate">
+            {name}
+            {isLocal && <span className="text-white/70 font-normal"> · You</span>}
           </span>
           <span
             className={cn(
-              'text-xs px-2 py-0.5 rounded-full',
+              'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md shrink-0',
               role === 'AGENT'
-                ? 'bg-indigo-500/30 text-indigo-300'
-                : 'bg-emerald-500/30 text-emerald-300'
+                ? 'bg-indigo-500/90 text-white'
+                : 'bg-emerald-500/90 text-white'
             )}
           >
             {role === 'AGENT' ? 'Agent' : 'Customer'}

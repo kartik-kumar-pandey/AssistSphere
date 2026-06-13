@@ -50,43 +50,44 @@ export async function stopRecording(sessionId: string, recordingId: string) {
     },
   });
 
-  // Simulate processing — in production use FFmpeg with mediasoup PlainTransport
-  setTimeout(async () => {
-    const dir = path.join(process.cwd(), config.recordingsDir, sessionId);
-    fs.mkdirSync(dir, { recursive: true });
-    const filename = `${recordingId}.webm`;
-    const filePath = path.join(dir, filename);
-
-    // Placeholder metadata file (real impl would mux RTP streams via FFmpeg)
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({
-        note: 'Recording placeholder — integrate FFmpeg with mediasoup PlainTransport for production',
-        sessionId,
-        recordingId,
-        createdAt: new Date().toISOString(),
-      })
-    );
-
-    await prisma.recording.update({
-      where: { id: recordingId },
-      data: {
-        status: RecordingStatus.READY,
-        filePath,
-        fileUrl: `/api/recordings/${recordingId}/download`,
-      },
-    });
-
-    await prisma.event.create({
-      data: {
-        sessionId,
-        type: 'RECORDING_READY',
-        payload: { recordingId },
-      },
-    });
-  }, 3000);
-
   return recording;
+}
+
+export async function saveRecordingFile(
+  sessionId: string,
+  recordingId: string,
+  fileBuffer: Buffer
+) {
+  const recording = await prisma.recording.findFirst({
+    where: { id: recordingId, sessionId },
+  });
+  if (!recording) throw new Error('Recording not found');
+
+  const dir = path.join(process.cwd(), config.recordingsDir, sessionId);
+  fs.mkdirSync(dir, { recursive: true });
+  const filename = `${recordingId}.webm`;
+  const filePath = path.join(dir, filename);
+
+  fs.writeFileSync(filePath, fileBuffer);
+
+  await prisma.recording.update({
+    where: { id: recordingId },
+    data: {
+      status: RecordingStatus.READY,
+      filePath,
+      fileUrl: `/api/recordings/${recordingId}/download`,
+    },
+  });
+
+  await prisma.event.create({
+    data: {
+      sessionId,
+      type: 'RECORDING_READY',
+      payload: { recordingId, size: fileBuffer.length },
+    },
+  });
+
+  return { filePath, fileUrl: `/api/recordings/${recordingId}/download` };
 }
 
 export async function getRecording(recordingId: string) {

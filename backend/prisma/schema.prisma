@@ -25,11 +25,25 @@ enum RecordingStatus {
   FAILED
 }
 
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agentSessions Session[] @relation("AgentSessions")
+}
+
 model Session {
   id          String        @id @default(cuid())
   status      SessionStatus @default(ACTIVE)
   inviteToken String        @unique
   agentName   String?
+  agentUserId String?
+  agentUser   User?         @relation("AgentSessions", fields: [agentUserId], references: [id])
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
   createdAt   DateTime      @default(now())

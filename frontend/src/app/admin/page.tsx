@@ -107,22 +107,21 @@ export default function AdminPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950" />
-        <div className="relative z-10 max-w-md mx-auto px-6 py-20">
-          <Link href="/" className="inline-flex items-center gap-2 text-slate-400 hover:text-white mb-8">
+      <div className="min-h-screen bg-[#f0f4f8]">
+        <div className="max-w-md mx-auto px-6 py-20">
+          <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-indigo-600 mb-8">
             <ArrowLeft className="w-4 h-4" /> Back
           </Link>
           <div className="flex items-center gap-3 mb-8">
-            <Shield className="w-8 h-8 text-indigo-400" />
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <Shield className="w-8 h-8 text-indigo-600" />
+            <h1 className="text-2xl font-bold text-slate-900">Admin dashboard</h1>
           </div>
           <Card glow>
             <form onSubmit={handleLogin} className="space-y-4">
               <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
               <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              <Button type="submit" loading={loading} className="w-full">Sign In</Button>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <Button type="submit" loading={loading} className="w-full">Sign in</Button>
             </form>
           </Card>
         </div>
@@ -131,13 +130,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <header className="border-b border-white/5 glass sticky top-0 z-10">
+    <div className="min-h-screen bg-[#f0f4f8]">
+      <header className="border-b border-slate-200 bg-white sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></Link>
-            <Shield className="w-6 h-6 text-indigo-400" />
-            <h1 className="text-lg font-bold">Admin Dashboard</h1>
+            <Link href="/" className="text-slate-500 hover:text-indigo-600"><ArrowLeft className="w-5 h-5" /></Link>
+            <Shield className="w-6 h-6 text-indigo-600" />
+            <h1 className="text-lg font-bold text-slate-900">Admin dashboard</h1>
           </div>
           <Button variant="ghost" size="sm" onClick={() => token && fetchData(token)} loading={refreshing}>
             <RefreshCw className="w-4 h-4" /> Refresh
@@ -149,8 +148,8 @@ export default function AdminPage() {
         {/* Live sessions */}
         <section>
           <div className="flex items-center gap-2 mb-4">
-            <Radio className="w-5 h-5 text-red-400" />
-            <h2 className="text-lg font-semibold">Live Sessions ({liveSessions.length})</h2>
+            <Radio className="w-5 h-5 text-red-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Live sessions ({liveSessions.length})</h2>
           </div>
           {liveSessions.length === 0 ? (
             <Card className="text-center text-slate-500 py-8">No active sessions</Card>
@@ -160,14 +159,14 @@ export default function AdminPage() {
                 <Card key={s.id} className="space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium">{s.agentName || 'Unknown Agent'}</p>
-                      <p className="text-xs text-slate-500 font-mono">{s.id.slice(0, 12)}...</p>
+                      <p className="font-medium text-slate-900">{s.agentName || 'Unknown agent'}</p>
+                      <p className="text-xs text-slate-400 font-mono">{s.id.slice(0, 12)}...</p>
                     </div>
-                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full flex items-center gap-1">
+                    <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full flex items-center gap-1 border border-emerald-100">
                       <Activity className="w-3 h-3" /> Live
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-slate-400">
+                  <div className="flex items-center gap-4 text-sm text-slate-500">
                     <span className="flex items-center gap-1"><Users className="w-4 h-4" />{s.participants.length}</span>
                     <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{formatDuration(s.startedAt)}</span>
                   </div>
@@ -183,11 +182,11 @@ export default function AdminPage() {
 
         {/* History */}
         <section>
-          <h2 className="text-lg font-semibold mb-4">Session History</h2>
-          <div className="glass rounded-2xl overflow-hidden">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Session history</h2>
+          <div className="card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-slate-400">
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-500">
                   <th className="text-left p-4">Agent</th>
                   <th className="text-left p-4">Status</th>
                   <th className="text-left p-4">Participants</th>
@@ -198,16 +197,16 @@ export default function AdminPage() {
               </thead>
               <tbody>
                 {history.map((s) => (
-                  <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="p-4">{s.agentName || '—'}</td>
+                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                    <td className="p-4 text-slate-900">{s.agentName || '—'}</td>
                     <td className="p-4">
-                      <span className={`text-xs px-2 py-1 rounded-full ${s.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-500/20 text-slate-400'}`}>
+                      <span className={`text-xs px-2 py-1 rounded-full ${s.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-600'}`}>
                         {s.status}
                       </span>
                     </td>
-                    <td className="p-4">{s.participants.length}</td>
-                    <td className="p-4">{s._count?.messages ?? 0}</td>
-                    <td className="p-4">{formatDuration(s.startedAt, s.endedAt)}</td>
+                    <td className="p-4 text-slate-700">{s.participants.length}</td>
+                    <td className="p-4 text-slate-700">{s._count?.messages ?? 0}</td>
+                    <td className="p-4 text-slate-700">{formatDuration(s.startedAt, s.endedAt)}</td>
                     <td className="p-4">
                       <Button variant="ghost" size="sm" onClick={() => viewDetail(s)}>View</Button>
                     </td>
@@ -220,10 +219,10 @@ export default function AdminPage() {
 
         {/* Session detail modal */}
         {selectedSession && sessionDetail && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <Card className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">Session Details</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Session details</h3>
                 <button onClick={() => { setSelectedSession(null); setSessionDetail(null); }}>
                   <ArrowLeft className="w-5 h-5 text-slate-400" />
                 </button>
@@ -232,12 +231,12 @@ export default function AdminPage() {
               {'participants' in (sessionDetail as object) && (
                 <div className="space-y-4">
                   <div>
-                    <h4 className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                    <h4 className="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
                       <Users className="w-4 h-4" /> Participants
                     </h4>
                     {(sessionDetail as { participants: Session['participants'] }).participants.map((p) => (
-                      <div key={p.id} className="flex justify-between text-sm py-2 border-b border-white/5">
-                        <span>{p.name} ({p.role})</span>
+                      <div key={p.id} className="flex justify-between text-sm py-2 border-b border-slate-100">
+                        <span className="text-slate-900">{p.name} ({p.role})</span>
                         <span className="text-slate-500">{p.durationSec ? `${p.durationSec}s` : 'Active'}</span>
                       </div>
                     ))}
@@ -245,12 +244,13 @@ export default function AdminPage() {
 
                   {'messages' in (sessionDetail as object) && (
                     <div>
-                      <h4 className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
                         <MessageSquare className="w-4 h-4" /> Messages
                       </h4>
                       {(sessionDetail as { messages: { senderName: string; text: string; createdAt: string }[] }).messages.slice(0, 10).map((m, i) => (
                         <div key={i} className="text-sm py-1">
-                          <span className="text-indigo-400">{m.senderName}:</span> {m.text}
+                          <span className="text-indigo-600 font-medium">{m.senderName}:</span>{' '}
+                          <span className="text-slate-700">{m.text}</span>
                         </div>
                       ))}
                     </div>
@@ -258,7 +258,7 @@ export default function AdminPage() {
 
                   {'events' in (sessionDetail as object) && (
                     <div>
-                      <h4 className="text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-slate-500 mb-2 flex items-center gap-2">
                         <FileText className="w-4 h-4" /> Events
                       </h4>
                       {(sessionDetail as { events: { type: string; createdAt: string }[] }).events.map((e, i) => (
@@ -274,8 +274,8 @@ export default function AdminPage() {
 
         {/* Metrics link */}
         <Card className="text-center">
-          <p className="text-slate-400 text-sm mb-2">Prometheus metrics available at</p>
-          <code className="text-indigo-400 text-sm">http://localhost:4000/metrics</code>
+          <p className="text-slate-500 text-sm mb-2">Prometheus metrics available at</p>
+          <code className="text-indigo-600 text-sm bg-indigo-50 px-2 py-1 rounded">http://localhost:4000/metrics</code>
         </Card>
       </main>
     </div>

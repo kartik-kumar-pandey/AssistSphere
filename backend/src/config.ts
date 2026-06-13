@@ -25,7 +25,9 @@ export const config = {
   agentSecret: process.env.AGENT_SECRET || 'agent-secret-key',
   reconnectGraceMs: parseInt(process.env.RECONNECT_GRACE_MS || '30000', 10),
   mediasoup: {
-    announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || detectLocalIp(),
+    announcedIp:
+      process.env.MEDIASOUP_ANNOUNCED_IP ||
+      (process.env.NODE_ENV === 'development' ? '127.0.0.1' : detectLocalIp()),
     listenIp: process.env.MEDIASOUP_LISTEN_IP || '0.0.0.0',
     minPort: parseInt(process.env.MEDIASOUP_MIN_PORT || '40000', 10),
     maxPort: parseInt(process.env.MEDIASOUP_MAX_PORT || '49999', 10),

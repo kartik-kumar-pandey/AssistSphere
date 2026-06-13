@@ -1,159 +1,166 @@
-# Architecture — SupportVision
+# SupportVision — Architecture
 
-## System Overview
+Real-time video support platform built for hackathon evaluation. All media routes through a self-hosted **mediasoup SFU** — no third-party video SDKs.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Browser Clients                           │
-│  ┌──────────────┐                    ┌──────────────┐           │
-│  │ Agent Portal │                    │ Customer Join│           │
-│  │  (Next.js)   │                    │  (Next.js)   │           │
-│  └──────┬───────┘                    └──────┬───────┘           │
-└─────────┼───────────────────────────────────┼───────────────────┘
-          │ HTTP/REST                         │
-          │ WebSocket (Socket.io)             │
-          ▼                                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Node.js Backend (Express)                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐    │
-│  │ REST API    │  │ Socket.io    │  │ JWT Auth Middleware │    │
-│  │ Sessions    │  │ Signaling    │  │ Role Enforcement    │    │
-│  │ Chat/Files  │  │ Chat Events  │  │                     │    │
-│  └──────┬──────┘  └──────┬───────┘  └─────────────────────┘    │
-│         │                │                                       │
-│         │         ┌──────▼───────┐                               │
-│         │         │ mediasoup SFU │  ◄── Server-routed media    │
-│         │         │ (WebRTC)      │                               │
-│         │         └──────┬───────┘                               │
-└─────────┼────────────────┼───────────────────────────────────────┘
-          │                │
-          ▼                ▼ RTP/SRTP streams
-┌─────────────────┐  ┌─────────────────┐
-│   PostgreSQL    │  │  File Storage   │
-│   (Neon)        │  │  uploads/       │
-│                 │  │  recordings/    │
-│ • Sessions      │  └─────────────────┘
-│ • Participants  │
-│ • Messages      │
-│ • Events        │
-│ • Recordings    │
-└─────────────────┘
-```
+## System Diagram
 
-## Design Decisions
+```mermaid
+flowchart TB
+  subgraph clients [Web Clients]
+    Agent[Agent Browser]
+    Customer[Customer Browser]
+    Admin[Admin Dashboard]
+  end
 
-### Why mediasoup (SFU)?
+  subgraph frontend [Next.js Frontend :3000]
+    Pages[Landing / Login / Agent / Join / Call / Summary]
+    CallUI[CallRoom + VideoStage]
+    Hooks[useMediasoup / useChat / useClientRecording]
+  end
 
-The problem statement requires **media to route through a server** — direct P2P WebRTC is not acceptable. mediasoup is:
+  subgraph backend [Express Backend :4000]
+    API[REST API + JWT Auth]
+    Socket[Socket.io Signaling]
+    MS[mediasoup SFU Workers]
+    Services[Session / Recording / User Services]
+  end
 
-- Open-source and free
-- Production-grade SFU used by many companies
-- Supports mute/unmute, simulcast, recording via PlainTransport + FFmpeg
+  subgraph data [Persistence]
+  PG[(PostgreSQL / Neon)]
+  Files[Uploads + Recordings]
+  end
 
-Each session gets a mediasoup **Router**. Participants create **WebRtcTransports**, **produce** their local tracks, and **consume** remote tracks — all forwarded through the SFU.
-
-### Why Next.js + Express (not monolith)?
-
-- **Separation of concerns**: API/signaling/media server vs UI
-- **Independent scaling**: SFU workers can scale separately from web tier
-- **Modern UX**: Next.js App Router for fast, beautiful client experience
-
-### Authentication & Roles
-
-| Role | JWT Claims | Permissions |
-|------|-----------|-------------|
-| AGENT | `role: AGENT`, `sessionId` | Create/end sessions, recording |
-| CUSTOMER | `role: CUSTOMER`, `sessionId` | Join via invite, chat, media |
-| ADMIN | `role: ADMIN` | Dashboard, force-end sessions |
-
-Customers receive JWT only after validating invite token — they cannot create sessions.
-
-### Session Lifecycle
-
-```
-Agent creates session
-       │
-       ▼
-  ACTIVE ──────────────────► Customer joins via invite
-       │                              │
-       │                              ▼
-       │                    Both in mediasoup room
-       │                              │
-       ▼                              ▼
-  Agent ends / Admin force-end / All leave
-       │
-       ▼
-    ENDED → History queryable (participants, messages, events)
+  Agent --> Pages
+  Customer --> Pages
+  Admin --> Pages
+  Pages --> Hooks
+  Hooks <-->|WebRTC media| MS
+  Hooks <-->|signaling| Socket
+  Pages <-->|REST| API
+  API --> Services
+  Socket --> MS
+  Socket --> Services
+  Services --> PG
+  API --> Files
+  MS -.->|RTP/DTLS| Agent
+  MS -.->|RTP/DTLS| Customer
 ```
 
-### Reconnect Handling
+## Call Flow
 
-On unexpected disconnect:
-1. Server starts 30-second grace timer
-2. Other participants are **not** notified (seamless UX)
-3. If reconnect within window → cancel timer, resume
-4. After grace period → mark participant as left, notify others
+```mermaid
+sequenceDiagram
+  participant A as Agent
+  participant API as REST API
+  participant S as Socket.io
+  participant SFU as mediasoup
+  participant C as Customer
 
-### Recording Pipeline
-
-```
-Agent starts recording
-       │
-       ▼
-  IN_PROGRESS (DB + socket broadcast)
-       │
-  Agent stops recording
-       │
-       ▼
-  PROCESSING (async job)
-       │
-       ▼
-  READY → Download via GET /api/recordings/:id/download
+  A->>API: POST /sessions (create + invite token)
+  A->>S: room:join + createTransport/produce
+  SFU-->>A: camera + audio streams
+  C->>API: POST /sessions/join/:token
+  C->>S: room:join
+  S->>C: peer list + existing producers
+  C->>SFU: consume remote streams
+  A->>SFU: consume customer streams
+  Note over A,C: Chat via Socket.io, persisted to PostgreSQL
+  A->>API: End session
+  S->>C: session:ended
 ```
 
-> Production recording: use mediasoup PlainTransport to pipe RTP into FFmpeg for real muxed output.
+## Video Layout (VideoStage)
 
-### Observability
+| Participants | Layout |
+|---|---|
+| 1 | Full-width centered tile |
+| 2 | 50% / 50% side by side |
+| 3 | Local user 50% left; two remotes stacked 25% each on right |
+| 4 | 2×2 grid (25% each) |
+| Screen share active | 75% presentation stage left; 25% camera filmstrip right |
 
-Prometheus metrics exposed at `/metrics`:
+Screen share uses a **separate mediasoup producer** (`appData.source: screen`). Camera tiles never show the presentation feed.
 
-- `active_sessions_total` — Live mediasoup rooms
-- `connected_participants_total` — Peers in SFU
-- `errors_total` — Application error counter
+## Tech Stack
 
-Compatible with Grafana (free, self-hosted).
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15, React, Tailwind CSS |
+| Backend | Express 5, Socket.io |
+| Media | mediasoup SFU (own server) |
+| Database | PostgreSQL via Prisma |
+| Auth | JWT (users, agents, session tokens) |
+| Metrics | Prometheus (`/metrics`) |
 
-## Database Schema
+## Requirements Checklist
 
+### Must-Have (Section 2)
+
+| Requirement | Status | Implementation |
+|---|---|---|
+| Agent creates session + invite link | ✅ | `POST /sessions`, `/agent` portal |
+| Browser join, no app install | ✅ | WebRTC + Next.js |
+| Track who is in session | ✅ | `Participant` model + mediasoup peers + People panel |
+| End session, clean disconnect | ✅ | `session:end`, transport teardown, `session:ended` |
+| Session history persisted | ✅ | Prisma + `/summary/[sessionId]` |
+| Real-time A/V both ways | ✅ | mediasoup SFU produce/consume |
+| Media via server (not P2P) | ✅ | mediasoup router, no peer mesh |
+| Mute / video off | ✅ | Producer pause + UI toggles |
+| In-call chat real-time | ✅ | Socket.io `chat:message` |
+| Chat persisted | ✅ | `Message` model + API |
+| Agent vs Customer roles | ✅ | JWT `Role`, route guards |
+| Invite required for customers | ✅ | `inviteToken` on join |
+
+### Good-to-Have (Section 3)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Call recording | ✅ | Agent-side MediaRecorder composite + upload |
+| File sharing in chat | ✅ | Multer upload, images/PDF/docs |
+| Reconnect grace window | ✅ | `reconnect.service.ts`, 30s grace |
+| Admin dashboard | ✅ | `/admin` live + history + force end |
+| Observability | ✅ | Prometheus gauges at `/metrics` |
+
+### Additional Features Built
+
+- User accounts (register/login) with Agent or Customer role
+- Dynamic Zoom/Meet-style video layouts + maximize tile
+- Separate presentation stage (75/25 split)
+- Screen share, raise hand, emoji stickers
+- Post-call summary page with transcript + recording download
+- Light-theme professional UI
+
+## Security Notes
+
+- JWT on all session APIs and socket handshake
+- Customers cannot create/end sessions or record
+- File upload type whitelist + size limits
+- Rate limiting on API (`100 req/min`)
+- Session access checks on messages/recordings
+
+## Environment
+
+```env
+# backend/.env
+DATABASE_URL=postgresql://...
+JWT_SECRET=...
+AGENT_SECRET=agent-secret-key
+MEDIASOUP_ANNOUNCED_IP=127.0.0.1  # LAN IP for cross-device
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
 ```
-Session ──┬── Participant (join/leave timestamps, duration)
-          ├── Message (chat + file references)
-          ├── Event (audit log)
-          ├── Recording (status lifecycle)
-          └── SessionFile (uploaded attachments)
-```
 
-## Security Considerations
+## Known Limitations
 
-- JWT on all protected routes and socket connections
-- Role middleware blocks customer from agent actions (403)
-- Invite token required for customer join
-- File upload type whitelist (images, PDF, DOCX)
-- Rate limiting on API (100 req/min)
-- Agent secret required for session creation
+- Recording is client-side composite (agent browser), not server-side FFmpeg
+- No TURN server configured (same-network or LAN IP required for dev)
+- Legacy agent secret auth still supported alongside user accounts
 
-## Scaling Path
+## Demo Credentials
 
-1. **Horizontal**: Multiple mediasoup workers behind load balancer
-2. **Redis**: Replace in-memory reconnect state for multi-instance
-3. **S3/MinIO**: Move file storage off local disk
-4. **FFmpeg workers**: Dedicated recording processing queue
-
-## Cost: 100% Free Tier
-
-| Service | Free Option |
-|---------|-------------|
-| Database | Neon PostgreSQL free tier |
-| Hosting | Railway/Render free tier, or local |
-| Media | Self-hosted mediasoup (no per-minute fees) |
-| Monitoring | Prometheus + Grafana (self-hosted) |
+| Role | Access |
+|---|---|
+| Agent (account) | Register at `/register` as Agent |
+| Agent (legacy) | Name + `agent-secret-key` on `/agent` |
+| Admin | `admin` / `admin123` |
+| Customer | Join via invite link (login optional) |

@@ -164,6 +164,7 @@ async function handleSessionJoin(
   }
 
   socket.to(sessionId).emit('peer:joined', {
+    id: peerId,
     peerId,
     name: user.name,
     role: user.role,
@@ -228,16 +229,28 @@ function registerMediaHandlers(
   socket.on(
     'produce',
     async (
-      { transportId, kind, rtpParameters }: { transportId: string; kind: 'audio' | 'video'; rtpParameters: object },
+      {
+        transportId,
+        kind,
+        rtpParameters,
+        appData,
+      }: {
+        transportId: string;
+        kind: 'audio' | 'video';
+        rtpParameters: object;
+        appData?: { source?: string };
+      },
       cb
     ) => {
       try {
-        const { id } = await produce(sessionId, peerId, transportId, kind, rtpParameters);
-        console.log(`NEW PRODUCER ${id} (${kind}) peer=${peerId} room=${sessionId}`);
+        const source = appData?.source || (kind === 'video' ? 'camera' : 'audio');
+        const { id } = await produce(sessionId, peerId, transportId, kind, rtpParameters, { source });
+        console.log(`NEW PRODUCER ${id} (${kind}/${source}) peer=${peerId} room=${sessionId}`);
         socket.to(sessionId).emit('newProducer', {
           peerId,
           producerId: id,
           kind,
+          source,
           name: user.name,
           role: user.role,
         });
@@ -293,6 +306,14 @@ function registerMediaHandlers(
 
   socket.on('mediaState', ({ audio, video }: { audio: boolean; video: boolean }) => {
     socket.to(sessionId).emit('peer:mediaState', { peerId, name: user.name, audio, video });
+  });
+
+  socket.on('raiseHand', ({ raised }: { raised: boolean }) => {
+    socket.to(sessionId).emit('peer:raiseHand', { peerId, name: user.name, raised });
+  });
+
+  socket.on('sendSticker', ({ emoji }: { emoji: string }) => {
+    io.to(sessionId).emit('peer:sticker', { peerId, name: user.name, emoji });
   });
 }
 
@@ -391,10 +412,6 @@ function registerSessionHandlers(
       await stopRecording(sessionId, recordingId);
       io.to(sessionId).emit('recording:status', { status: 'PROCESSING', recordingId });
       cb?.({ success: true });
-
-      setTimeout(async () => {
-        io.to(sessionId).emit('recording:status', { status: 'READY', recordingId });
-      }, 3500);
     } catch {
       incrementErrors();
       cb?.({ success: false });
@@ -403,6 +420,74 @@ function registerSessionHandlers(
 
   socket.on('leave', async () => {
     await handleLeave(io, socket, sessionId, peerId, user, false);
+  });
+
+  socket.on('kickPeer', async (...args: unknown[]) => {
+    const cb = getAck(args);
+    const data = args[0] as { targetPeerId?: string } | undefined;
+    const targetPeerId = data?.targetPeerId;
+
+    if (user.role !== Role.AGENT) {
+      cb?.({ success: false, error: 'Only agents can remove participants' });
+      return;
+    }
+    if (!targetPeerId) {
+      cb?.({ success: false, error: 'Target participant required' });
+      return;
+    }
+    if (targetPeerId === peerId) {
+      cb?.({ success: false, error: 'Cannot remove yourself' });
+      return;
+    }
+
+    try {
+      const roomSockets = await io.in(sessionId).fetchSockets();
+      const targetSocket = roomSockets.find(
+        (s) => (s.data as SocketData).peerId === targetPeerId
+      );
+
+      if (!targetSocket) {
+        cb?.({ success: false, error: 'Participant not found in call' });
+        return;
+      }
+
+      const targetData = targetSocket.data as SocketData;
+      if (targetData.user.role === Role.AGENT) {
+        cb?.({ success: false, error: 'Cannot remove another agent' });
+        return;
+      }
+
+      const closedProducers = removePeer(sessionId, targetPeerId);
+      for (const { producerId } of closedProducers) {
+        io.to(sessionId).emit('producerClosed', { peerId: targetPeerId, producerId });
+      }
+
+      if (targetData.user.participantId) {
+        await leaveParticipant(targetData.user.participantId);
+      }
+
+      const targetName = targetData.user.name;
+      targetSocket.emit('kicked', { reason: `Removed from call by ${user.name}` });
+      io.to(sessionId).emit('peer:left', { peerId: targetPeerId, name: targetName, kicked: true });
+
+      const sockets = sessionSockets.get(sessionId);
+      sockets?.delete(targetSocket.id);
+      targetSocket.disconnect(true);
+
+      await prisma.event.create({
+        data: {
+          sessionId,
+          type: 'PARTICIPANT_KICKED',
+          payload: { targetPeerId, targetName, by: user.name },
+        },
+      });
+
+      updateMetrics();
+      cb?.({ success: true });
+    } catch {
+      incrementErrors();
+      cb?.({ success: false, error: 'Failed to remove participant' });
+    }
   });
 }
 
@@ -413,9 +498,14 @@ function handleDisconnect(
   peerId: string,
   user: JwtPayload
 ) {
+  // Remove mediasoup peer immediately so others don't count ghost participants
+  const closedProducers = removePeer(sessionId, peerId);
+  for (const { producerId } of closedProducers) {
+    io.to(sessionId).emit('producerClosed', { peerId, producerId });
+  }
+
   if (user.participantId) {
     scheduleDisconnect(socket.id, sessionId, peerId, user.participantId, async () => {
-      removePeer(sessionId, peerId);
       await leaveParticipant(user.participantId!);
       io.to(sessionId).emit('peer:left', { peerId, name: user.name });
       updateMetrics();

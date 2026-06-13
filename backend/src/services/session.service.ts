@@ -3,12 +3,13 @@ import { Role, SessionStatus } from '@prisma/client';
 import { prisma } from '../db/client.js';
 import { signToken } from '../auth/jwt.js';
 
-export async function createSession(agentName: string) {
+export async function createSession(agentName: string, agentUserId?: string) {
   const inviteToken = nanoid(12);
   const session = await prisma.session.create({
     data: {
       inviteToken,
       agentName,
+      agentUserId: agentUserId || null,
       status: SessionStatus.ACTIVE,
       events: {
         create: { type: 'SESSION_CREATED', payload: { agentName } },

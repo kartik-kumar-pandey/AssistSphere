@@ -16,7 +16,8 @@ import {
   getActiveSessions,
   getAllSessions,
 } from '../services/session.service.js';
-import { getRecording, getSessionRecordings } from '../services/recording.service.js';
+import { getRecording, getSessionRecordings, saveRecordingFile } from '../services/recording.service.js';
+import { registerUser, loginUser } from '../services/user.service.js';
 import { incrementErrors } from '../metrics/prometheus.js';
 
 function paramId(value: string | string[]): string {
@@ -53,6 +54,28 @@ const upload = multer({
   },
 });
 
+const recordingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('video/') || file.mimetype === 'application/octet-stream') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only video recordings allowed'));
+    }
+  },
+});
+
+async function assertSessionAccess(req: AuthRequest, sessionId: string) {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session) return null;
+  const allowed =
+    req.user!.role === Role.ADMIN ||
+    req.user!.sessionId === sessionId ||
+    (req.user!.role === Role.AGENT && session.agentName === req.user!.name);
+  return allowed ? session : null;
+}
+
 const limiter = rateLimit({ windowMs: 60_000, max: 100 });
 
 export function createApiRouter(onForceEnd?: (sessionId: string) => void): Router {
@@ -63,7 +86,42 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Agent authentication
+  // User registration & login
+  router.post('/auth/register', async (req, res) => {
+    try {
+      const { email, password, name, role } = req.body;
+      if (!email?.trim() || !password || !name?.trim()) {
+        return res.status(400).json({ error: 'Email, password, and name are required' });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      const userRole = role === 'AGENT' ? Role.AGENT : Role.CUSTOMER;
+      const user = await registerUser(email, password, name, userRole);
+      const token = signToken({ sub: user.id, role: user.role, name: user.name });
+      res.json({ token, user });
+    } catch (err) {
+      incrementErrors();
+      res.status(400).json({ error: err instanceof Error ? err.message : 'Registration failed' });
+    }
+  });
+
+  router.post('/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email?.trim() || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+      const user = await loginUser(email, password);
+      const token = signToken({ sub: user.id, role: user.role, name: user.name });
+      res.json({ token, user });
+    } catch (err) {
+      incrementErrors();
+      res.status(403).json({ error: err instanceof Error ? err.message : 'Login failed' });
+    }
+  });
+
+  // Agent authentication (legacy shared secret)
   router.post('/auth/agent', async (req, res) => {
     try {
       const { name, secret } = req.body;
@@ -108,7 +166,8 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
   router.post('/sessions', authMiddleware, requireRole(Role.AGENT), async (req: AuthRequest, res: Response) => {
     try {
       const agentName = req.user!.name;
-      const result = await createSession(agentName);
+      const agentUserId = req.user!.sub.startsWith('agent-') ? undefined : req.user!.sub;
+      const result = await createSession(agentName, agentUserId);
       res.status(201).json({
         sessionId: result.session.id,
         inviteToken: result.inviteToken,
@@ -160,6 +219,25 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     }
   });
 
+  // Agent session history
+  router.get('/sessions/agent/history', authMiddleware, requireRole(Role.AGENT), async (req: AuthRequest, res: Response) => {
+    try {
+      const sessions = await prisma.session.findMany({
+        where: { agentName: req.user!.name },
+        orderBy: { startedAt: 'desc' },
+        take: 50,
+        include: {
+          participants: true,
+          _count: { select: { messages: true, recordings: true } },
+        },
+      });
+      res.json(sessions);
+    } catch {
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to fetch history' });
+    }
+  });
+
   // End session (agent or admin)
   router.post(
     '/sessions/:id/end',
@@ -201,8 +279,12 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
   // Chat messages
   router.get('/sessions/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+      const sessionId = paramId(req.params.id);
+      const session = await assertSessionAccess(req, sessionId);
+      if (!session) return res.status(403).json({ error: 'Access denied' });
+
       const messages = await prisma.message.findMany({
-        where: { sessionId: paramId(req.params.id) },
+        where: { sessionId },
         orderBy: { createdAt: 'asc' },
       });
       res.json(messages);
@@ -276,12 +358,41 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     }
   });
 
-  router.get('/recordings/:id/download', authMiddleware, async (req, res) => {
+  router.post(
+    '/recordings/:id/upload',
+    authMiddleware,
+    requireRole(Role.AGENT),
+    recordingUpload.single('file'),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        if (!req.file) return res.status(400).json({ error: 'No recording file uploaded' });
+
+        const recordingId = paramId(req.params.id);
+        const recording = await getRecording(recordingId);
+        if (!recording) return res.status(404).json({ error: 'Recording not found' });
+
+        const session = await assertSessionAccess(req, recording.sessionId);
+        if (!session) return res.status(403).json({ error: 'Access denied' });
+
+        const result = await saveRecordingFile(recording.sessionId, recordingId, req.file.buffer);
+        res.json({ success: true, ...result, status: 'READY' });
+      } catch {
+        incrementErrors();
+        res.status(500).json({ error: 'Recording upload failed' });
+      }
+    }
+  );
+
+  router.get('/recordings/:id/download', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const recording = await getRecording(paramId(req.params.id));
       if (!recording || recording.status !== 'READY' || !recording.filePath) {
         return res.status(404).json({ error: 'Recording not available' });
       }
+
+      const session = await assertSessionAccess(req, recording.sessionId);
+      if (!session) return res.status(403).json({ error: 'Access denied' });
+
       if (!fs.existsSync(recording.filePath)) {
         return res.status(404).json({ error: 'Recording file not found' });
       }

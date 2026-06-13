@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { CallRoom } from '@/components/CallRoom';
-import { loadAuth, clearAuth } from '@/lib/utils';
+import { loadAuth } from '@/lib/utils';
 
 interface AuthData {
   token: string;
@@ -38,15 +38,13 @@ export default function CallPage() {
   }, [sessionId, router]);
 
   function handleLeave() {
-    if (auth?.role === 'AGENT') clearAuth('agentAuth');
-    else clearAuth('customerAuth');
-    router.push('/');
+    router.push(`/summary/${sessionId}`);
   }
 
   if (!auth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+      <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8]">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
       </div>
     );
   }

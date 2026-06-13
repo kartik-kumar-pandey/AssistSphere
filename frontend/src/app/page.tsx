@@ -1,100 +1,154 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Video, Shield, MessageSquare, Headphones, ArrowRight, Sparkles } from 'lucide-react';
+import {
+  Video, Shield, MessageSquare, ArrowRight, Radio, Users, Clock,
+  Zap, CheckCircle2, X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { HeroPreview } from '@/components/HeroPreview';
 
 export default function HomePage() {
-  return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-slate-950" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-indigo-600/20 rounded-full blur-[120px]" />
-      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-violet-600/10 rounded-full blur-[100px]" />
+  const [showKicked, setShowKicked] = useState(false);
 
-      <nav className="relative z-10 flex items-center justify-between px-6 py-5 max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30">
-            <Video className="w-6 h-6 text-indigo-400" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">SupportVision</span>
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('kicked')) {
+      setShowKicked(true);
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen page-shell hero-mesh">
+      {showKicked && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 card-elevated px-4 py-3 flex items-center gap-3 shadow-xl animate-fade-up max-w-md">
+          <p className="text-sm text-[var(--color-text)]">You were removed from the call by the agent.</p>
+          <button onClick={() => setShowKicked(false)} className="text-muted hover:text-[var(--color-text)]">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/admin">
-            <Button variant="ghost" size="sm">Admin</Button>
-          </Link>
-          <Link href="/agent">
-            <Button size="sm">Agent Portal</Button>
-          </Link>
+      )}
+
+      <nav className="border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 animate-fade-up">
+            <div className="w-10 h-10 rounded-xl btn-primary flex items-center justify-center">
+              <Video className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-lg font-bold">SupportVision</span>
+          </div>
+          <div className="flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
+            <ThemeToggle />
+            <Link href="/login">
+              <Button variant="ghost" size="sm">Sign in</Button>
+            </Link>
+            <Link href="/agent">
+              <Button size="sm">Start session</Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-16 pb-24">
-        <div className="text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm text-indigo-300 mb-8">
-            <Sparkles className="w-4 h-4" />
-            Server-routed video · Zero third-party SDKs
-          </div>
+      <main className="max-w-6xl mx-auto px-6">
+        {/* Hero */}
+        <section className="pt-16 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-14 lg:gap-10 items-center">
+          <div>
+            <div className="animate-fade-up inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-200/60 dark:border-indigo-500/30 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-6">
+              <Radio className="w-3.5 h-3.5" />
+              Own your video stack — no Twilio, no Agora
+            </div>
 
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-tight mb-6">
-            Video support that{' '}
-            <span className="gradient-text">actually works</span>
-          </h1>
+            <h1 className="animate-fade-up animate-fade-up-delay-1 text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold leading-[1.1] tracking-tight mb-6">
+              See the problem.
+              <br />
+              <span className="text-shimmer">Solve it on video.</span>
+            </h1>
 
-          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Help customers visually — share screens, troubleshoot devices, and resolve issues
-            faster with real-time video calls routed through your own infrastructure.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/agent">
-              <Button size="lg" className="min-w-[200px]">
-                Start as Agent
-                <ArrowRight className="w-5 h-5" />
-              </Button>
-            </Link>
-            <p className="text-sm text-slate-500">
-              Customers join via invite link — no app needed
+            <p className="animate-fade-up animate-fade-up-delay-2 text-lg text-muted leading-relaxed mb-8 max-w-lg">
+              Support agents share a link. Customers join in one click. Video, chat, and
+              screen share run through your mediasoup server — not someone else&apos;s cloud.
             </p>
-          </div>
-        </div>
 
-        <div className="grid md:grid-cols-3 gap-6 mt-24">
+            <div className="animate-fade-up animate-fade-up-delay-3 flex flex-wrap gap-3 mb-10">
+              <Link href="/agent">
+                <Button size="lg" className="group">
+                  Create a session
+                  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button variant="secondary" size="lg">Create account</Button>
+              </Link>
+            </div>
+
+            <div className="animate-fade-up animate-fade-up-delay-4 flex flex-wrap gap-6 text-sm text-muted">
+              {[
+                { icon: CheckCircle2, text: 'Browser-only join' },
+                { icon: Zap, text: '< 2s to connect' },
+                { icon: Shield, text: 'Role-based access' },
+              ].map(({ icon: Icon, text }) => (
+                <span key={text} className="flex items-center gap-1.5">
+                  <Icon className="w-4 h-4 text-indigo-500" />
+                  {text}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="animate-fade-up animate-fade-up-delay-2 lg:pl-4">
+            <HeroPreview />
+          </div>
+        </section>
+
+        {/* Stats strip */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-20 animate-fade-up animate-fade-up-delay-3">
+          {[
+            { value: 'SFU', label: 'Server-routed media' },
+            { value: 'WebRTC', label: 'Browser native' },
+            { value: '0', label: 'Third-party video SDKs' },
+            { value: '24/7', label: 'Session history' },
+          ].map((s) => (
+            <div key={s.label} className="card p-4 text-center hover:scale-[1.02] transition-transform duration-300">
+              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{s.value}</p>
+              <p className="text-xs text-muted mt-1">{s.label}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Features */}
+        <section className="grid md:grid-cols-3 gap-5 pb-24">
           {[
             {
               icon: Video,
-              title: 'Server-Routed Media',
-              desc: 'All audio & video flows through mediasoup SFU — no peer-to-peer, full control.',
+              title: 'Real SFU video',
+              desc: 'mediasoup routes every stream. Agents, customers, and screen share — all through your infra.',
             },
             {
               icon: MessageSquare,
-              title: 'In-Call Chat',
-              desc: 'Real-time messaging with file sharing, persisted for every session record.',
+              title: 'Chat that sticks',
+              desc: 'Messages and file uploads persist. Pull the full transcript after every call.',
             },
             {
               icon: Shield,
-              title: 'Role-Based Access',
-              desc: 'Agents create sessions. Customers join via secure invite tokens only.',
+              title: 'Agents in control',
+              desc: 'Create sessions, record calls, remove participants, and end when it\'s done.',
             },
-          ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="glass rounded-2xl p-6 hover:bg-white/[0.07] transition-colors">
-              <div className="p-3 rounded-xl bg-indigo-600/20 w-fit mb-4">
-                <Icon className="w-6 h-6 text-indigo-400" />
+          ].map(({ icon: Icon, title, desc }, i) => (
+            <div
+              key={title}
+              className="card p-6 hover:border-indigo-300/50 dark:hover:border-indigo-500/30 transition-all duration-300 hover:-translate-y-1 animate-fade-up"
+              style={{ animationDelay: `${0.4 + i * 0.1}s` }}
+            >
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center mb-4">
+                <Icon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">{title}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{desc}</p>
+              <h3 className="font-bold mb-2">{title}</h3>
+              <p className="text-muted text-sm leading-relaxed">{desc}</p>
             </div>
           ))}
-        </div>
-
-        <div className="mt-24 glass rounded-3xl p-8 md:p-12 text-center">
-          <Headphones className="w-12 h-12 text-indigo-400 mx-auto mb-4" />
-          <h2 className="text-2xl md:text-3xl font-bold mb-3">Ready to assist your customers?</h2>
-          <p className="text-slate-400 mb-6">Create a session in seconds and share the invite link.</p>
-          <Link href="/agent">
-            <Button size="lg">Get Started Free</Button>
-          </Link>
-        </div>
+        </section>
       </main>
     </div>
   );

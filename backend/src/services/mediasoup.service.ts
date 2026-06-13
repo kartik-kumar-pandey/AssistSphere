@@ -218,7 +218,8 @@ export async function produce(
   peerId: string,
   transportId: string,
   kind: 'audio' | 'video',
-  rtpParameters: object
+  rtpParameters: object,
+  appData?: { source?: string }
 ) {
   const room = getOrCreateRoom(sessionId);
   const peer = room.peers.get(peerId);
@@ -227,9 +228,12 @@ export async function produce(
   const transport = peer.transports.get(transportId);
   if (!transport) throw new Error('Transport not found');
 
+  const source = appData?.source || (kind === 'video' ? 'camera' : 'audio');
+
   const producer = await transport.produce({
     kind,
     rtpParameters: rtpParameters as never,
+    appData: { source },
   });
 
   peer.producers.set(producer.id, producer);
@@ -310,17 +314,21 @@ export function getRouterRtpCapabilities(sessionId: string) {
 
 export function getOtherProducers(sessionId: string, excludePeerId: string) {
   const room = getOrCreateRoom(sessionId);
-  const producers: { peerId: string; name: string; role: string; producerId: string; kind: string }[] = [];
+  const producers: { peerId: string; name: string; role: string; producerId: string; kind: string; source: string }[] = [];
 
   for (const [peerId, peer] of room.peers) {
     if (peerId === excludePeerId) continue;
     for (const [producerId, producer] of peer.producers) {
+      const source =
+        (producer.appData as { source?: string })?.source ||
+        (producer.kind === 'audio' ? 'audio' : 'camera');
       producers.push({
         peerId,
         name: peer.name,
         role: peer.role,
         producerId,
         kind: producer.kind,
+        source,
       });
     }
   }
