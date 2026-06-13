@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  AGENT
+  CUSTOMER
+  ADMIN
+}
+
+enum SessionStatus {
+  ACTIVE
+  ENDED
+}
+
+enum RecordingStatus {
+  IN_PROGRESS
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  status      SessionStatus @default(ACTIVE)
+  inviteToken String        @unique
+  agentName   String?
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  participants Participant[]
+  messages     Message[]
+  events       Event[]
+  recordings   Recording[]
+  files        SessionFile[]
+
+  @@index([status])
+  @@index([inviteToken])
+}
+
+model Participant {
+  id          String    @id @default(cuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name        String
+  role        Role
+  socketId    String?
+  joinedAt    DateTime  @default(now())
+  leftAt      DateTime?
+  durationSec Int?
+
+  @@index([sessionId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderName String
+  senderRole Role
+  text       String?
+  fileUrl    String?
+  fileName   String?
+  fileMime   String?
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+model Recording {
+  id        String          @id @default(cuid())
+  sessionId String
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status    RecordingStatus @default(IN_PROGRESS)
+  filePath  String?
+  fileUrl   String?
+  startedAt DateTime        @default(now())
+  endedAt   DateTime?
+
+  @@index([sessionId])
+}
+
+model SessionFile {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  filename   String
+  originalName String
+  uploader   String
+  uploaderRole Role
+  url        String
+  mimeType   String
+  size       Int
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+}
