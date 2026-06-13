@@ -41,6 +41,9 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
             <ThemeToggle />
+            <Link href="/admin">
+              <Button variant="ghost" size="sm">Admin</Button>
+            </Link>
             <Link href="/login">
               <Button variant="ghost" size="sm">Sign in</Button>
             </Link>
