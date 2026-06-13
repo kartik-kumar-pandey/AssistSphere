@@ -112,8 +112,8 @@ export default function AgentPage() {
             <Video className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Agent portal</h1>
-            <p className="text-slate-500 text-sm">Create a support session</p>
+            <h1 className="text-2xl font-bold text-[var(--color-text)]">Agent portal</h1>
+            <p className="text-muted text-sm">Create a support session</p>
           </div>
         </div>
 
@@ -122,7 +122,7 @@ export default function AgentPage() {
             <form onSubmit={handleAuth} className="space-y-5">
               <Input id="name" label="Your name" placeholder="Sarah Chen" value={name} onChange={(e) => setName(e.target.value)} required disabled={!!loggedInUser} />
               {loggedInUser && (
-                <p className="text-sm text-indigo-600 bg-indigo-50 rounded-xl px-3 py-2">
+                <p className="text-sm text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl px-3 py-2">
                   Signed in as {loggedInUser.name}
                 </p>
               )}
@@ -136,12 +136,12 @@ export default function AgentPage() {
               <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-4">
                 <Check className="w-7 h-7 text-emerald-600" />
               </div>
-              <h2 className="text-xl font-bold text-slate-900">Ready to go</h2>
-              <p className="text-slate-500 text-sm mt-1">Share this link with your customer</p>
+              <h2 className="text-xl font-bold text-[var(--color-text)]">Ready to go</h2>
+              <p className="text-muted text-sm mt-1">Share this link with your customer</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-2">Invite link</p>
-              <p className="text-sm text-indigo-600 break-all font-mono">{session.inviteLink}</p>
+            <div className="bg-[var(--color-surface-muted)] rounded-xl p-4 border border-[var(--color-border)]">
+              <p className="text-[10px] uppercase tracking-wider text-muted mb-2">Invite link</p>
+              <p className="text-sm text-indigo-600 dark:text-indigo-400 break-all font-mono">{session.inviteLink}</p>
             </div>
             <div className="flex gap-3">
               <Button variant="secondary" onClick={copyLink} className="flex-1">
@@ -163,10 +163,10 @@ export default function AgentPage() {
             </h3>
             <div className="space-y-2">
               {history.slice(0, 5).map((s) => (
-                <Link key={s.id} href={`/summary/${s.id}`} className="block card px-4 py-3 hover:border-indigo-200 transition-colors">
+                <Link key={s.id} href={`/summary/${s.id}`} className="block card px-4 py-3 hover:border-indigo-500/50 transition-colors">
                   <div className="flex justify-between">
-                    <span className="text-sm font-medium capitalize text-slate-800">{s.status.toLowerCase()}</span>
-                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                    <span className="text-sm font-medium capitalize text-[var(--color-text)]">{s.status.toLowerCase()}</span>
+                    <span className="text-xs text-muted flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {new Date(s.startedAt).toLocaleDateString()}
                     </span>

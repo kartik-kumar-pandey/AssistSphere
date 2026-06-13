@@ -51,8 +51,8 @@ export default function RegisterPage() {
             <UserPlus className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Create account</h1>
-            <p className="text-slate-500 text-sm">Join as agent or customer</p>
+            <h1 className="text-2xl font-bold text-[var(--color-text)]">Create account</h1>
+            <p className="text-muted text-sm">Join as agent or customer</p>
           </div>
         </div>
         <Card glow>
@@ -61,7 +61,7 @@ export default function RegisterPage() {
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Account type</label>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Account type</label>
               <div className="grid grid-cols-2 gap-2">
                 {(['CUSTOMER', 'AGENT'] as const).map((r) => (
                   <button
@@ -70,8 +70,8 @@ export default function RegisterPage() {
                     onClick={() => setRole(r)}
                     className={`py-2.5 rounded-xl text-sm font-semibold border transition-colors ${
                       role === r
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
+                        : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-muted)]'
                     }`}
                   >
                     {r === 'AGENT' ? 'Agent' : 'Customer'}

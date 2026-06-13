@@ -49,8 +49,8 @@ export default function LoginPage() {
             <LogIn className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Sign in</h1>
-            <p className="text-slate-500 text-sm">Access your AssistSphere account</p>
+            <h1 className="text-2xl font-bold text-[var(--color-text)]">Sign in</h1>
+            <p className="text-muted text-sm">Access your AssistSphere account</p>
           </div>
         </div>
         <Card glow>

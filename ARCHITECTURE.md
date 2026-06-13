@@ -1,6 +1,6 @@
-# SupportVision — Architecture
+# AssistSphere — Architecture
 
-Real-time video support platform built for hackathon evaluation. All media routes through a self-hosted **mediasoup SFU** — no third-party video SDKs.
+Real-time video support platform built for the AtomQuest Hackathon finale. All media routes through a self-hosted **mediasoup SFU** — no third-party video SDKs.
 
 ## System Diagram
 
@@ -12,13 +12,13 @@ flowchart TB
     Admin[Admin Dashboard]
   end
 
-  subgraph frontend [Next.js Frontend :3000]
+  subgraph frontend [Vercel Next.js Frontend]
     Pages[Landing / Login / Agent / Join / Call / Summary]
     CallUI[CallRoom + VideoStage]
     Hooks[useMediasoup / useChat / useClientRecording]
   end
 
-  subgraph backend [Express Backend :4000]
+  subgraph backend [Oracle Cloud PM2 Backend]
     API[REST API + JWT Auth]
     Socket[Socket.io Signaling]
     MS[mediasoup SFU Workers]
@@ -79,16 +79,16 @@ sequenceDiagram
 | 4 | 2×2 grid (25% each) |
 | Screen share active | 75% presentation stage left; 25% camera filmstrip right |
 
-Screen share uses a **separate mediasoup producer** (`appData.source: screen`). Camera tiles never show the presentation feed.
+Screen share uses a **separate mediasoup producer** (`appData.source: screen`). Camera tiles never show the presentation feed. React state management forces component re-renders by recreating `MediaStream` instances whenever remote tracks are added or removed to ensure flawless UI synchronization.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 15, React, Tailwind CSS |
-| Backend | Express 5, Socket.io |
-| Media | mediasoup SFU (own server) |
-| Database | PostgreSQL via Prisma |
+| Backend | Express 5, Socket.io, PM2 |
+| Media | mediasoup SFU (Oracle Cloud Server) |
+| Database | PostgreSQL via Prisma (Neon) |
 | Auth | JWT (users, agents, session tokens) |
 | Metrics | Prometheus (`/metrics`) |
 
@@ -128,7 +128,8 @@ Screen share uses a **separate mediasoup producer** (`appData.source: screen`). 
 - Separate presentation stage (75/25 split)
 - Screen share, raise hand, emoji stickers
 - Post-call summary page with transcript + recording download
-- Light-theme professional UI
+- Dark/Light theme professional UI utilizing native CSS variables
+- Robust session persistence with PM2 ensuring zero-downtime server restarts
 
 ## Security Notes
 
@@ -144,8 +145,8 @@ Screen share uses a **separate mediasoup producer** (`appData.source: screen`). 
 # backend/.env
 DATABASE_URL=postgresql://...
 JWT_SECRET=...
-AGENT_SECRET=agent-secret-key
-MEDIASOUP_ANNOUNCED_IP=127.0.0.1  # LAN IP for cross-device
+# No agent secret needed; JWT/auth manages agent sessions
+MEDIASOUP_ANNOUNCED_IP=xxx.xxx.xxx.xxx  # Oracle Cloud Public IP
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin123
 ```
@@ -153,14 +154,13 @@ ADMIN_PASSWORD=admin123
 ## Known Limitations
 
 - Recording is client-side composite (agent browser), not server-side FFmpeg
-- No TURN server configured (same-network or LAN IP required for dev)
-- Legacy agent secret auth still supported alongside user accounts
+- No TURN server configured (depends on standard SFU NAT traversal)
 
 ## Demo Credentials
 
 | Role | Access |
 |---|---|
 | Agent (account) | Register at `/register` as Agent |
-| Agent (legacy) | Name + `agent-secret-key` on `/agent` |
+| Agent (guest) | Name on `/agent` creates an ad-hoc session token |
 | Admin | `admin` / `admin123` |
 | Customer | Join via invite link (login optional) |

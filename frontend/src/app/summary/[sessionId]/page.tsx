@@ -65,7 +65,7 @@ export default function SummaryPage() {
 
   if (loading || !session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8]">
+      <div className="min-h-screen flex items-center justify-center page-shell">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
       </div>
     );
@@ -79,13 +79,13 @@ export default function SummaryPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8]">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4">
+    <div className="min-h-screen page-shell">
+      <nav className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl btn-primary flex items-center justify-center">
             <Video className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-slate-900">AssistSphere</span>
+          <span className="font-bold text-[var(--color-text)]">AssistSphere</span>
         </div>
       </nav>
 
@@ -104,8 +104,8 @@ export default function SummaryPage() {
               <Video className="w-7 h-7 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Session complete</h1>
-              <p className="text-slate-500 mt-1">
+              <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text)]">Session complete</h1>
+              <p className="text-muted mt-1">
                 Support call with {session.agentName}
                 {duration !== null && ` · ${duration} min`}
               </p>
@@ -121,7 +121,7 @@ export default function SummaryPage() {
 
         {session.recordings.length > 0 && (
           <section className="card p-6 mb-6">
-            <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <h2 className="font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <Download className="w-4 h-4 text-indigo-500" />
               Recordings
             </h2>
@@ -129,13 +129,13 @@ export default function SummaryPage() {
               {session.recordings.map((rec) => (
                 <div
                   key={rec.id}
-                  className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100"
+                  className="flex items-center justify-between bg-[var(--color-surface-muted)] rounded-xl px-4 py-3 border border-[var(--color-border)]"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-900">
+                    <p className="text-sm font-medium text-[var(--color-text)]">
                       {new Date(rec.startedAt).toLocaleString()}
                     </p>
-                    <p className="text-xs text-slate-500 capitalize">{rec.status.toLowerCase()}</p>
+                    <p className="text-xs text-muted capitalize">{rec.status.toLowerCase()}</p>
                   </div>
                   {rec.status === 'READY' && auth?.role === 'AGENT' && (
                     <a
@@ -169,7 +169,7 @@ export default function SummaryPage() {
         )}
 
         <section className="card p-6 mb-6">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-indigo-500" />
             Chat transcript
           </h2>
@@ -180,10 +180,10 @@ export default function SummaryPage() {
               session.messages.map((msg, i) => (
                 <div
                   key={i}
-                  className="bg-slate-50 rounded-lg px-3 py-2 text-sm border border-slate-100"
+                  className="bg-[var(--color-surface-muted)] rounded-lg px-3 py-2 text-sm border border-[var(--color-border)]"
                 >
-                  <span className="text-indigo-600 font-medium">{msg.senderName}: </span>
-                  <span className="text-slate-700">{msg.text}</span>
+                  <span className="text-indigo-500 font-medium">{msg.senderName}: </span>
+                  <span className="text-[var(--color-text)]">{msg.text}</span>
                   {msg.fileUrl && (
                     <a
                       href={`${API_URL.replace('/api', '')}${msg.fileUrl}`}
@@ -201,7 +201,7 @@ export default function SummaryPage() {
         </section>
 
         <section className="card p-6 mb-8">
-          <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <h2 className="font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
             <FileText className="w-4 h-4 text-indigo-500" />
             Participants
           </h2>
@@ -209,10 +209,10 @@ export default function SummaryPage() {
             {session.participants.map((p, i) => (
               <li
                 key={i}
-                className="flex justify-between text-sm bg-slate-50 rounded-lg px-3 py-2 border border-slate-100"
+                className="flex justify-between text-sm bg-[var(--color-surface-muted)] rounded-lg px-3 py-2 border border-[var(--color-border)]"
               >
-                <span className="text-slate-900">{p.name}</span>
-                <span className="text-slate-500 capitalize">{p.role.toLowerCase()}</span>
+                <span className="text-[var(--color-text)]">{p.name}</span>
+                <span className="text-muted capitalize">{p.role.toLowerCase()}</span>
               </li>
             ))}
           </ul>
@@ -236,10 +236,10 @@ function Stat({
   value: string;
 }) {
   return (
-    <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
+    <div className="bg-[var(--color-surface-muted)] rounded-xl p-4 text-center border border-[var(--color-border)]">
       <Icon className="w-5 h-5 text-indigo-500 mx-auto mb-2" />
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500 uppercase tracking-wider mt-1">{label}</p>
+      <p className="text-2xl font-bold text-[var(--color-text)]">{value}</p>
+      <p className="text-xs text-muted uppercase tracking-wider mt-1">{label}</p>
     </div>
   );
 }

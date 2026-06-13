@@ -69,20 +69,20 @@ export default function JoinPage() {
 
   if (validating) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8]">
+      <div className="min-h-screen flex items-center justify-center page-shell">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8]">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4">
+    <div className="min-h-screen page-shell">
+      <nav className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl btn-primary flex items-center justify-center">
             <Video className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-slate-900">AssistSphere</span>
+          <span className="font-bold text-[var(--color-text)]">AssistSphere</span>
         </div>
       </nav>
 
@@ -97,20 +97,20 @@ export default function JoinPage() {
 
         {error && !sessionInfo ? (
           <Card className="text-center">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Cannot join</h2>
-            <p className="text-slate-500">{error}</p>
+            <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">Cannot join</h2>
+            <p className="text-muted">{error}</p>
           </Card>
         ) : (
           <>
             <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto mb-4">
-                <Headphones className="w-8 h-8 text-indigo-600" />
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 flex items-center justify-center mx-auto mb-4">
+                <Headphones className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 mb-2">Join support call</h1>
+              <h1 className="text-2xl font-bold text-[var(--color-text)] mb-2">Join support call</h1>
               {sessionInfo?.agentName && (
-                <p className="text-slate-500">
+                <p className="text-muted">
                   Your agent:{' '}
-                  <span className="text-slate-900 font-semibold">{sessionInfo.agentName}</span>
+                  <span className="text-[var(--color-text)] font-semibold">{sessionInfo.agentName}</span>
                 </p>
               )}
             </div>
