@@ -41,22 +41,35 @@ function VideoTile({
 
     const attachMedia = () => {
       const videoTrack = stream.getVideoTracks()[0];
-      setHasVideo(Boolean(videoTrack && videoTrack.readyState !== 'ended'));
 
       if (videoEl) {
         if (videoTrack && videoTrack.readyState !== 'ended') {
           const videoStream = new MediaStream([videoTrack]);
           videoEl.srcObject = videoStream;
+
+          // Use loadedmetadata to detect when actual video frames arrive
+          const onMeta = () => setHasVideo(true);
+          videoEl.addEventListener('loadedmetadata', onMeta, { once: true });
+          unmuteCleanups.push(() => videoEl.removeEventListener('loadedmetadata', onMeta));
+
+          // Also handle the case where track starts muted (mediasoup initial state)
+          const onUnmute = () => {
+            setHasVideo(true);
+            videoEl.play().catch(() => {});
+          };
+          videoTrack.addEventListener('unmute', onUnmute);
+          unmuteCleanups.push(() => videoTrack.removeEventListener('unmute', onUnmute));
+
+          // If track is already live/unmuted, set hasVideo immediately
+          if (!videoTrack.muted) setHasVideo(true);
+
           videoEl
             .play()
             .then(() => setNeedsInteraction(false))
             .catch(() => setNeedsInteraction(true));
-
-          const onUnmute = () => videoEl.play().catch(() => {});
-          videoTrack.addEventListener('unmute', onUnmute);
-          unmuteCleanups.push(() => videoTrack.removeEventListener('unmute', onUnmute));
         } else {
           videoEl.srcObject = null;
+          setHasVideo(false);
         }
       }
 
