@@ -12,6 +12,7 @@ interface AuthData {
   sessionId: string;
   participantId: string;
   role: 'AGENT' | 'CUSTOMER';
+  inviteLink?: string;
 }
 
 export default function CallPage() {
@@ -55,6 +56,7 @@ export default function CallPage() {
       token={auth.token}
       name={auth.name}
       role={auth.role}
+      inviteLink={auth.inviteLink}
       onLeave={handleLeave}
     />
   );

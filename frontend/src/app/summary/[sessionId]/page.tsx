@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Clock, Download, FileText, Loader2, MessageSquare, Users, Video,
+  ArrowLeft, Clock, Download, FileText, Loader2, MessageSquare, Users, Video, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { apiFetch, loadAuth, clearAuth, API_URL } from '@/lib/utils';
@@ -34,6 +34,7 @@ export default function SummaryPage() {
   const sessionId = params.sessionId as string;
   const [auth, setAuth] = useState<AuthData | null>(null);
   const [session, setSession] = useState<SessionHistory | null>(null);
+  const [summaryData, setSummaryData] = useState<{ summary: string; actionItems: string[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,8 +52,14 @@ export default function SummaryPage() {
     }
     setAuth(data);
 
-    apiFetch<SessionHistory>(`/sessions/${sessionId}`, {}, data.token)
-      .then(setSession)
+    Promise.all([
+      apiFetch<SessionHistory>(`/sessions/${sessionId}`, {}, data.token),
+      apiFetch<{ summary: string; actionItems: string[] }>(`/sessions/${sessionId}/summary`, {}, data.token).catch(() => null)
+    ])
+      .then(([historyRes, summaryRes]) => {
+        setSession(historyRes);
+        if (summaryRes) setSummaryData(summaryRes);
+      })
       .catch(() => router.replace('/'))
       .finally(() => setLoading(false));
   }, [sessionId, router]);
@@ -164,6 +171,30 @@ export default function SummaryPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {summaryData && summaryData.summary && (
+          <section className="card p-6 mb-6 bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900/50">
+            <h2 className="font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              AI Meeting Summary
+            </h2>
+            <div className="space-y-4">
+              <p className="text-sm text-[var(--color-text)] leading-relaxed">
+                {summaryData.summary}
+              </p>
+              {summaryData.actionItems.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-text)] mb-2">Action Items</h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {summaryData.actionItems.map((item, i) => (
+                      <li key={i} className="text-sm text-[var(--color-text)]">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </section>
         )}

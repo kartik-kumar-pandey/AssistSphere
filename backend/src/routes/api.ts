@@ -18,6 +18,7 @@ import {
 } from '../services/session.service.js';
 import { getRecording, getSessionRecordings, saveRecordingFile } from '../services/recording.service.js';
 import { registerUser, loginUser } from '../services/user.service.js';
+import { getBranding, updateBranding } from '../services/branding.service.js';
 import { incrementErrors } from '../metrics/prometheus.js';
 
 function paramId(value: string | string[]): string {
@@ -178,6 +179,39 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     }
   });
 
+  // Invite link for active session (agent in call)
+  router.get(
+    '/sessions/:id/invite-link',
+    authMiddleware,
+    requireRole(Role.AGENT, Role.ADMIN),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const sessionId = paramId(req.params.id);
+        const session = await prisma.session.findUnique({
+          where: { id: sessionId },
+          select: { inviteToken: true, status: true, agentName: true },
+        });
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+        if (session.status !== 'ACTIVE') return res.status(410).json({ error: 'Session has ended' });
+
+        const isParticipant =
+          req.user!.sessionId === sessionId ||
+          req.user!.role === Role.ADMIN ||
+          (req.user!.role === Role.AGENT && session.agentName === req.user!.name);
+
+        if (!isParticipant) return res.status(403).json({ error: 'Access denied' });
+
+        res.json({
+          inviteToken: session.inviteToken,
+          inviteLink: `${config.frontendUrl}/join/${session.inviteToken}`,
+        });
+      } catch {
+        incrementErrors();
+        res.status(500).json({ error: 'Failed to fetch invite link' });
+      }
+    }
+  );
+
   // Validate invite token
   router.get('/sessions/invite/:token', async (req, res) => {
     try {
@@ -288,6 +322,79 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     } catch {
       incrementErrors();
       res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+  });
+
+  // Mock AI Summary
+  router.get('/sessions/:id/summary', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const sessionId = paramId(req.params.id);
+      const session = await assertSessionAccess(req, sessionId);
+      if (!session) return res.status(403).json({ error: 'Access denied' });
+
+      const messages = await prisma.message.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (messages.length === 0) {
+        return res.json({ summary: "No conversation took place.", actionItems: [] });
+      }
+
+      // Construct prompt from messages
+      const transcript = messages.map(m => `${m.senderName} (${m.senderRole}): ${m.text}`).join('\n');
+      
+      const prompt = `You are a helpful AI assistant summarizing support chat sessions.
+Read the following chat transcript and provide a brief summary and a list of actionable items.
+Return ONLY a valid JSON object with exactly two keys: "summary" (a string) and "actionItems" (an array of strings).
+
+Transcript:
+${transcript}`;
+
+      // Call NVIDIA API
+      const invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions";
+      const headers = {
+        "Authorization": "Bearer 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",
+        "Content-Type": "application/json"
+      };
+      
+      const payload = {
+        "model": "mistralai/mistral-large-3-675b-instruct-2512",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1024,
+        "temperature": 0.15,
+        "response_format": { "type": "json_object" }
+      };
+
+      const aiResponse = await fetch(invoke_url, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!aiResponse.ok) {
+        throw new Error(`API returned ${aiResponse.status}`);
+      }
+
+      const aiData = await aiResponse.json();
+      const contentStr = aiData.choices[0].message.content;
+      
+      let summaryData;
+      try {
+        summaryData = JSON.parse(contentStr);
+      } catch (e) {
+        // Fallback if parsing fails
+        summaryData = { summary: "Failed to parse AI summary.", actionItems: [] };
+      }
+
+      res.json({
+        summary: summaryData.summary || "No summary available.",
+        actionItems: summaryData.actionItems || []
+      });
+    } catch (error) {
+      console.error('AI Summary Error:', error);
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to generate summary' });
     }
   });
 
@@ -429,6 +536,48 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     } catch {
       incrementErrors();
       res.status(500).json({ error: 'Failed to end session' });
+    }
+  });
+
+  // Public branding (for app theming)
+  router.get('/branding', async (_req, res) => {
+    try {
+      const branding = await getBranding();
+      res.json(branding);
+    } catch {
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to fetch branding' });
+    }
+  });
+
+  router.get('/admin/branding', authMiddleware, requireRole(Role.ADMIN), async (_req, res) => {
+    try {
+      const branding = await getBranding();
+      res.json(branding);
+    } catch {
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to fetch branding' });
+    }
+  });
+
+  router.put('/admin/branding', authMiddleware, requireRole(Role.ADMIN), async (req, res) => {
+    try {
+      const { appName, primaryColor, primaryHover, logoUrl, logoDarkUrl } = req.body;
+      const branding = await updateBranding({
+        appName,
+        primaryColor,
+        primaryHover,
+        logoUrl,
+        logoDarkUrl,
+      });
+      res.json(branding);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.startsWith('INVALID_')) {
+        return res.status(400).json({ error: 'Invalid branding values' });
+      }
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to update branding' });
     }
   });
 

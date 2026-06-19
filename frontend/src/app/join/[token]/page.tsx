@@ -7,6 +7,7 @@ import { ArrowLeft, Headphones, Loader2, Video } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import { BrandLogo } from '@/components/BrandLogo';
 import { apiFetch, saveAuth, loadAuth, API_URL } from '@/lib/utils';
 
 export default function JoinPage() {
@@ -78,11 +79,8 @@ export default function JoinPage() {
   return (
     <div className="min-h-screen page-shell">
       <nav className="bg-[var(--color-surface)] border-b border-[var(--color-border)] px-6 py-4">
-        <div className="max-w-md mx-auto flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl btn-primary flex items-center justify-center">
-            <Video className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-[var(--color-text)]">AssistSphere</span>
+        <div className="max-w-md mx-auto">
+          <BrandLogo size="sm" />
         </div>
       </nav>
 

@@ -32,6 +32,7 @@ import {
   connectedParticipantsGauge,
   incrementErrors,
 } from '../metrics/prometheus.js';
+import { loadWhiteboard, saveWhiteboard, clearWhiteboard } from '../services/whiteboard.service.js';
 
 interface SocketData {
   user: JwtPayload;
@@ -42,6 +43,7 @@ interface SocketData {
 }
 
 const sessionSockets = new Map<string, Set<string>>();
+const sessionAdmitted = new Map<string, Set<string>>(); // sessionId -> Set of admitted peerIds
 
 type AckFn = (result: object) => void;
 
@@ -95,9 +97,11 @@ export async function setupSocketServer(io: Server) {
         return;
       }
       try {
-        const roomData = await handleSessionJoin(io, socket, user, data.sessionId, data.peerId);
-        (socket.data as SocketData).joined = true;
-        cb({ success: true, ...roomData });
+        const result = await handleSessionJoin(io, socket, user, data.sessionId, data.peerId);
+        if (!result.waiting) {
+          (socket.data as SocketData).joined = true;
+        }
+        cb({ success: true, ...result });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to join room';
         console.error('room:join failed:', message);
@@ -128,6 +132,28 @@ async function handleSessionJoin(
 
   if (user.participantId) {
     cancelDisconnectByParticipant(user.participantId);
+  }
+
+  // Handle Waiting Room Logic
+  if (user.role === Role.CUSTOMER) {
+    let admittedSet = sessionAdmitted.get(sessionId);
+    if (!admittedSet) {
+      admittedSet = new Set();
+      sessionAdmitted.set(sessionId, admittedSet);
+    }
+    
+    if (!admittedSet.has(peerId)) {
+      // Not yet admitted, put in lobby
+      socket.join(`lobby:${sessionId}`);
+      io.to(sessionId).emit('peer:waiting', { peerId, name: user.name, role: user.role });
+      
+      // Register minimal handlers to be able to be admitted
+      if (!(socket.data as SocketData).handlersRegistered) {
+        (socket.data as SocketData).handlersRegistered = true;
+      }
+      
+      return { waiting: true, peerId };
+    }
   }
 
   const closedProducers = removePeer(sessionId, peerId);
@@ -315,6 +341,10 @@ function registerMediaHandlers(
   socket.on('sendSticker', ({ emoji }: { emoji: string }) => {
     io.to(sessionId).emit('peer:sticker', { peerId, name: user.name, emoji });
   });
+
+  socket.on('caption', (caption: { peerId: string; name: string; text: string; isFinal: boolean }) => {
+    socket.to(sessionId).emit('peer:caption', caption);
+  });
 }
 
 function registerChatHandlers(io: Server, socket: Socket, sessionId: string, user: JwtPayload) {
@@ -354,6 +384,30 @@ function registerChatHandlers(io: Server, socket: Socket, sessionId: string, use
       });
 
       io.to(sessionId).emit('chat:message', message);
+    } catch {
+      incrementErrors();
+    }
+  });
+
+  socket.on('whiteboard:get', async (...args: unknown[]) => {
+    const cb = getAck(args);
+    try {
+      const data = await loadWhiteboard(sessionId);
+      cb?.({ success: true, elements: data.elements, updatedAt: data.updatedAt });
+    } catch {
+      incrementErrors();
+      cb?.({ success: false, elements: [] });
+    }
+  });
+
+  socket.on('whiteboard:update', async ({ elements }: { elements: unknown[] }) => {
+    try {
+      if (!Array.isArray(elements)) return;
+      const data = await saveWhiteboard(sessionId, elements);
+      socket.to(sessionId).emit('whiteboard:sync', {
+        elements: data.elements,
+        updatedAt: data.updatedAt,
+      });
     } catch {
       incrementErrors();
     }
@@ -416,6 +470,24 @@ function registerSessionHandlers(
       incrementErrors();
       cb?.({ success: false });
     }
+  });
+
+  socket.on('room:admit', async ({ targetPeerId }: { targetPeerId: string }, cb?: (result: object) => void) => {
+    if (user.role !== Role.AGENT) {
+      cb?.({ success: false, error: 'Only agents can admit participants' });
+      return;
+    }
+
+    let admittedSet = sessionAdmitted.get(sessionId);
+    if (!admittedSet) {
+      admittedSet = new Set();
+      sessionAdmitted.set(sessionId, admittedSet);
+    }
+    admittedSet.add(targetPeerId);
+
+    // Tell the target socket they are admitted so they can re-request room:join
+    io.to(`lobby:${sessionId}`).emit('admitted', { peerId: targetPeerId });
+    cb?.({ success: true });
   });
 
   socket.on('leave', async () => {
@@ -544,6 +616,7 @@ async function handleLeave(
 }
 
 function cleanupSession(io: Server, sessionId: string) {
+  clearWhiteboard(sessionId);
   destroyRoom(sessionId);
   sessionSockets.delete(sessionId);
   io.in(sessionId).socketsLeave(sessionId);

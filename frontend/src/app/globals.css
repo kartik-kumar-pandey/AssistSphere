@@ -53,12 +53,15 @@
     border-color: color-mix(in srgb, var(--color-border) 60%, transparent);
   }
   .btn-primary {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    @apply text-white shadow-md shadow-indigo-500/25 hover:brightness-105 transition-all duration-300;
+    background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary) 100%);
+    @apply text-white shadow-md transition-all duration-300;
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.05);
   }
   .dark .btn-primary {
-    background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 40%, transparent);
   }
   .page-shell {
     background: var(--color-page);
@@ -152,4 +155,119 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Floating sticker — vertical rise and scale/opacity fade */
+@keyframes sticker-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.35);
+  }
+  6% {
+    opacity: 1;
+    transform: translateY(-8vh) scale(1.1);
+  }
+  12% {
+    transform: translateY(-16vh) scale(1.0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-94vh) scale(0.65);
+  }
+}
+
+/* Floating sticker wobble — horizontal sway and tilt */
+@keyframes sticker-wobble-right {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(20px) rotate(6deg);
+  }
+  50% {
+    transform: translateX(0) rotate(0deg);
+  }
+  75% {
+    transform: translateX(-20px) rotate(-6deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+@keyframes sticker-wobble-left {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(-20px) rotate(-6deg);
+  }
+  50% {
+    transform: translateX(0) rotate(0deg);
+  }
+  75% {
+    transform: translateX(20px) rotate(6deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+/* Emoji entrance — smooth spring pop */
+@keyframes sticker-snake-emoji {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; }
+  40%  { transform: scale(1.15) rotate(3deg); opacity: 1; }
+  65%  { transform: scale(0.95) rotate(-1deg); }
+  85%  { transform: scale(1.02) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Sticker overlay on VideoTile — smooth pop-in then fade out */
+@keyframes sticker-overlay-pop {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  15%  { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  30%  { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
+  45%  { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+  60%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+.sticker-snake-right,
+.sticker-snake-left {
+  animation: sticker-rise 5.5s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.sticker-snake-right .sticker-snake-body {
+  animation: sticker-wobble-right 2.4s ease-in-out infinite;
+  animation-delay: inherit;
+  will-change: transform;
+}
+
+.sticker-snake-left .sticker-snake-body {
+  animation: sticker-wobble-left 2.4s ease-in-out infinite;
+  animation-delay: inherit;
+  will-change: transform;
+}
+
+.sticker-snake-emoji {
+  animation: sticker-snake-emoji 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  display: inline-block;
+}
+
+.sticker-overlay-pop {
+  animation: sticker-overlay-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sticker-name-badge {
+  background: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.sticker-snake-body {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.15));
 }

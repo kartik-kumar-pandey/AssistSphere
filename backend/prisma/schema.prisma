@@ -54,6 +54,7 @@ model Session {
   events       Event[]
   recordings   Recording[]
   files        SessionFile[]
+  whiteboard   WhiteboardSnapshot?
 
   @@index([status])
   @@index([inviteToken])
@@ -126,4 +127,22 @@ model SessionFile {
   createdAt  DateTime @default(now())
 
   @@index([sessionId])
+}
+
+model WhiteboardSnapshot {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  elements  Json     @default("[]")
+  updatedAt DateTime @updatedAt
+}
+
+model BrandingSettings {
+  id            String   @id @default("default")
+  appName       String   @default("AssistSphere")
+  primaryColor  String   @default("#4f46e5")
+  primaryHover  String   @default("#4338ca")
+  logoUrl       String?
+  logoDarkUrl   String?
+  updatedAt     DateTime @updatedAt
 }

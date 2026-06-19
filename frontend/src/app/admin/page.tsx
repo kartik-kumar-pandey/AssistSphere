@@ -5,12 +5,13 @@ import Link from 'next/link';
 import {
   ArrowLeft, Shield, Activity, Users, Clock, Trash2,
   MessageSquare, FileText, RefreshCw, Radio,
-  BarChart3, PieChart as PieChartIcon
+  BarChart3, PieChart as PieChartIcon, Palette, ImageIcon, Save
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
-import { apiFetch, saveAuth, loadAuth, clearAuth } from '@/lib/utils';
+import { apiFetch, saveAuth, loadAuth, clearAuth, cn } from '@/lib/utils';
+import { useBranding } from '@/components/BrandingProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 interface Session {
@@ -35,6 +36,16 @@ export default function AdminPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [sessionDetail, setSessionDetail] = useState<object | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { refreshBranding } = useBranding();
+  const [brandingForm, setBrandingForm] = useState({
+    appName: 'AssistSphere',
+    primaryColor: '#4f46e5',
+    primaryHover: '#4338ca',
+    logoUrl: '',
+    logoDarkUrl: '',
+  });
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingMsg, setBrandingMsg] = useState('');
 
   useEffect(() => {
     const saved = loadAuth<{ token: string }>('adminAuth');
@@ -61,9 +72,49 @@ export default function AdminPage() {
   useEffect(() => {
     if (!token) return;
     fetchData(token);
+    loadBranding(token);
     const interval = setInterval(() => fetchData(token), 10000);
     return () => clearInterval(interval);
   }, [token, fetchData]);
+
+  async function loadBranding(authToken: string) {
+    try {
+      const data = await apiFetch<typeof brandingForm>('/admin/branding', {}, authToken);
+      setBrandingForm({
+        appName: data.appName,
+        primaryColor: data.primaryColor,
+        primaryHover: data.primaryHover,
+        logoUrl: data.logoUrl || '',
+        logoDarkUrl: data.logoDarkUrl || '',
+      });
+    } catch {
+      // keep defaults
+    }
+  }
+
+  async function saveBranding() {
+    if (!token) return;
+    setBrandingSaving(true);
+    setBrandingMsg('');
+    try {
+      await apiFetch('/admin/branding', {
+        method: 'PUT',
+        body: JSON.stringify({
+          appName: brandingForm.appName,
+          primaryColor: brandingForm.primaryColor,
+          primaryHover: brandingForm.primaryHover,
+          logoUrl: brandingForm.logoUrl || null,
+          logoDarkUrl: brandingForm.logoDarkUrl || null,
+        }),
+      }, token);
+      await refreshBranding();
+      setBrandingMsg('Branding saved — updates apply across the app.');
+    } catch (err) {
+      setBrandingMsg(err instanceof Error ? err.message : 'Failed to save branding');
+    } finally {
+      setBrandingSaving(false);
+    }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -215,6 +266,109 @@ export default function AdminPage() {
             <div>
               <p className="text-sm font-medium text-muted">Total Participants Served</p>
               <h3 className="text-3xl font-bold">{totalParticipantsAllTime}</h3>
+            </div>
+          </Card>
+        </section>
+
+        {/* Branding settings */}
+        <section className="animate-fade-up animate-fade-up-delay-2">
+          <div className="flex items-center gap-2 mb-4">
+            <Palette className="w-5 h-5 text-indigo-500" />
+            <h2 className="text-xl font-bold text-[var(--color-text)]">Custom Branding</h2>
+          </div>
+          <Card className="p-6 border border-[var(--color-border)] shadow-sm">
+            <p className="text-sm text-muted mb-6">
+              Set your primary colors and logo URLs. Changes are stored in PostgreSQL and applied app-wide.
+            </p>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <Input
+                  label="App name"
+                  value={brandingForm.appName}
+                  onChange={(e) => setBrandingForm((f) => ({ ...f, appName: e.target.value }))}
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Primary color</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandingForm.primaryColor}
+                        onChange={(e) => setBrandingForm((f) => ({ ...f, primaryColor: e.target.value }))}
+                        className="w-12 h-10 rounded-lg border border-[var(--color-border)] cursor-pointer"
+                      />
+                      <Input
+                        value={brandingForm.primaryColor}
+                        onChange={(e) => setBrandingForm((f) => ({ ...f, primaryColor: e.target.value }))}
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Primary hover</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandingForm.primaryHover}
+                        onChange={(e) => setBrandingForm((f) => ({ ...f, primaryHover: e.target.value }))}
+                        className="w-12 h-10 rounded-lg border border-[var(--color-border)] cursor-pointer"
+                      />
+                      <Input
+                        value={brandingForm.primaryHover}
+                        onChange={(e) => setBrandingForm((f) => ({ ...f, primaryHover: e.target.value }))}
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Input
+                  label="Logo URL (light mode)"
+                  placeholder="https://example.com/logo.png"
+                  value={brandingForm.logoUrl}
+                  onChange={(e) => setBrandingForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                />
+                <Input
+                  label="Logo URL (dark mode, optional)"
+                  placeholder="https://example.com/logo-dark.png"
+                  value={brandingForm.logoDarkUrl}
+                  onChange={(e) => setBrandingForm((f) => ({ ...f, logoDarkUrl: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <p className="text-sm font-semibold text-[var(--color-text)]">Preview</p>
+                <div className="rounded-2xl border border-[var(--color-border)] p-6 bg-[var(--color-surface-muted)] flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden text-white font-bold"
+                      style={{ background: `linear-gradient(135deg, ${brandingForm.primaryHover}, ${brandingForm.primaryColor})` }}
+                    >
+                      {brandingForm.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={brandingForm.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5" />
+                      )}
+                    </div>
+                    <span className="text-lg font-bold">{brandingForm.appName || 'AssistSphere'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm w-fit"
+                    style={{ background: `linear-gradient(135deg, ${brandingForm.primaryHover}, ${brandingForm.primaryColor})` }}
+                  >
+                    Sample button
+                  </button>
+                </div>
+                <Button onClick={saveBranding} loading={brandingSaving} className="w-fit">
+                  <Save className="w-4 h-4" />
+                  Save branding
+                </Button>
+                {brandingMsg && (
+                  <p className={cn('text-sm', brandingMsg.includes('Failed') ? 'text-red-500' : 'text-emerald-600')}>
+                    {brandingMsg}
+                  </p>
+                )}
+              </div>
             </div>
           </Card>
         </section>

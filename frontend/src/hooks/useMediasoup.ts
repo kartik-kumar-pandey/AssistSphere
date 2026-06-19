@@ -48,6 +48,7 @@ interface UseMediasoupOptions {
   onKicked?: (reason: string) => void;
   onRecordingStatus?: (status: { status: string; recordingId?: string }) => void;
   onError?: (message: string) => void;
+  onWaiting?: (peer: PeerInfo) => void;
 }
 
 // mediasoup-demo uses empty iceServers — server provides ICE candidates
@@ -112,6 +113,7 @@ export function useMediasoup({
   onKicked,
   onRecordingStatus,
   onError,
+  onWaiting,
 }: UseMediasoupOptions) {
   const socketRef = useRef<Socket | null>(null);
   const deviceRef = useRef<Device | null>(null);
@@ -136,14 +138,15 @@ export function useMediasoup({
     Promise.reject(new Error('Not ready'))
   );
 
-  const callbacksRef = useRef({ onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError });
-  callbacksRef.current = { onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError };
+  const callbacksRef = useRef({ onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError, onWaiting });
+  callbacksRef.current = { onPeerJoined, onPeerLeft, onSessionEnded, onKicked, onRecordingStatus, onError, onWaiting };
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteStream[]>([]);
   const [connected, setConnected] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -478,12 +481,19 @@ export function useMediasoup({
             teardownMedia();
             const stream = localStreamRef.current;
             if (!stream) return;
-            const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean }>(
+            const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean; waiting?: boolean }>(
               sock,
               'room:join'
             );
             if (aborted) return;
-            await setupMediasoup(roomResponse, stream);
+            if (roomResponse.waiting) {
+              setWaiting(true);
+              setOwnPeerId(roomResponse.peerId);
+              ownPeerIdRef.current = roomResponse.peerId;
+            } else {
+              setWaiting(false);
+              await setupMediasoup(roomResponse, stream);
+            }
             console.log('[mediasoup] reconnected and rejoined room');
           } catch (err) {
             callbacksRef.current.onError?.(
@@ -498,6 +508,24 @@ export function useMediasoup({
           peerNamesRef.current.set(peer.id, peer.name);
           setPeers((prev) => (prev.some((p) => p.id === peer.id) ? prev : [...prev, peer]));
           callbacksRef.current.onPeerJoined?.(peer);
+        });
+
+        sock.on('peer:waiting', (data: { id?: string; peerId?: string; name: string; role: string }) => {
+          const peer = normalizePeer(data);
+          if (peer) callbacksRef.current.onWaiting?.(peer);
+        });
+
+        sock.on('admitted', async ({ peerId }: { peerId: string }) => {
+          if (peerId !== ownPeerIdRef.current) return;
+          try {
+            const retryResponse = await socketRequest<RoomJoinedData & { success?: boolean }>(sock, 'room:join');
+            if (aborted) return;
+            setWaiting(false);
+            await setupMediasoup(retryResponse, stream);
+            hasJoinedRef.current = true;
+          } catch (e) {
+            console.error('Failed to join after admitted', e);
+          }
         });
 
         sock.on('peer:left', ({ peerId }: { peerId: string }) => {
@@ -553,12 +581,19 @@ export function useMediasoup({
         if (aborted) return;
         setConnected(true);
 
-        const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean }>(sock, 'room:join');
+        const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean; waiting?: boolean }>(sock, 'room:join');
         if (aborted) return;
 
-        console.log('[mediasoup] joined room, peers:', roomResponse.peers?.length ?? 0);
-        await setupMediasoup(roomResponse, stream);
-        hasJoinedRef.current = true;
+        if (roomResponse.waiting) {
+          setWaiting(true);
+          setOwnPeerId(roomResponse.peerId);
+          ownPeerIdRef.current = roomResponse.peerId;
+        } else {
+          setWaiting(false);
+          console.log('[mediasoup] joined room, peers:', roomResponse.peers?.length ?? 0);
+          await setupMediasoup(roomResponse, stream);
+          hasJoinedRef.current = true;
+        }
       } catch (err) {
         if (!aborted) {
           callbacksRef.current.onError?.(err instanceof Error ? err.message : 'Failed to connect');
@@ -702,8 +737,20 @@ export function useMediasoup({
     });
   }, []);
 
+  const admitPeer = useCallback((targetPeerId: string) => {
+    return new Promise<{ success: boolean }>((resolve, reject) => {
+      const sock = socketRef.current;
+      if (!sock?.connected) return reject(new Error('Not connected'));
+      sock.emit('room:admit', { targetPeerId }, (res: { success: boolean; error?: string }) => {
+        if (res?.success) resolve(res);
+        else reject(new Error(res?.error || 'Failed to admit participant'));
+      });
+    });
+  }, []);
+
   return {
     connected,
+    waiting,
     mediaReady,
     localStream,
     localScreenStream,
@@ -721,6 +768,7 @@ export function useMediasoup({
     stopRecording,
     leave,
     kickPeer,
+    admitPeer,
     socket,
   };
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare,
   Circle, Square, Paperclip, Send, X, Users, Download, Loader2,
-  ChevronLeft, Monitor, MonitorUp, Hand, Smile, UserMinus,
+  ChevronLeft, Monitor, MonitorUp, Hand, Smile, UserMinus, Zap, PenTool, Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -13,17 +13,23 @@ import { cn, API_URL, apiFetch } from '@/lib/utils';
 import { useMediasoup } from '@/hooks/useMediasoup';
 import { useClientRecording } from '@/hooks/useClientRecording';
 import { useChat } from '@/hooks/useChat';
+import { useCaptions } from '@/hooks/useCaptions';
 import { VideoStage, type Presentation, type StageTile } from '@/components/VideoStage';
+import { Whiteboard } from '@/components/Whiteboard';
+import { InviteShareMenu } from '@/components/InviteShareMenu';
+import { CallControl } from '@/components/CallControl';
+import { FloatingStickers, createFloatingSticker, type FloatingStickerItem } from '@/components/FloatingStickers';
 
 interface CallRoomProps {
   sessionId: string;
   token: string;
   name: string;
   role: 'AGENT' | 'CUSTOMER';
+  inviteLink?: string;
   onLeave: () => void;
 }
 
-export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProps) {
+export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkProp, onLeave }: CallRoomProps) {
   const router = useRouter();
   const [chatOpen, setChatOpen] = useState(true);
   const [sideTab, setSideTab] = useState<'chat' | 'participants'>('chat');
@@ -37,15 +43,38 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
   const [connectionError, setConnectionError] = useState('');
   const [handRaised, setHandRaised] = useState(false);
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
-  const [peerStickers, setPeerStickers] = useState<Record<string, string>>({});
+  const [floatingStickers, setFloatingStickers] = useState<FloatingStickerItem[]>([]);
   const [stickerOpen, setStickerOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [kickingPeerId, setKickingPeerId] = useState<string | null>(null);
+  const [cannedOpen, setCannedOpen] = useState(false);
+  const [lobbyPeers, setLobbyPeers] = useState<{id: string; name: string; role: string}[]>([]);
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [inviteLink, setInviteLink] = useState(inviteLinkProp ?? '');
 
   const STICKERS = ['👍', '👏', '😂', '❤️', '🎉', '🙏', '✅', '🔥'];
+  const CANNED_RESPONSES = [
+    "Hello! How can I help you today?",
+    "Could you please share your screen so I can see the issue?",
+    "I'm looking into this for you right now.",
+    "Let me check with my team, one moment.",
+    "Is there anything else I can assist you with?"
+  ];
 
   useEffect(() => {
     sessionEndedRef.current = sessionEnded;
   }, [sessionEnded]);
+
+  useEffect(() => {
+    if (inviteLinkProp) setInviteLink(inviteLinkProp);
+  }, [inviteLinkProp]);
+
+  useEffect(() => {
+    if (role !== 'AGENT' || inviteLink) return;
+    apiFetch<{ inviteLink: string }>(`/sessions/${sessionId}/invite-link`, {}, token)
+      .then((data) => setInviteLink(data.inviteLink))
+      .catch(() => {});
+  }, [role, inviteLink, sessionId, token]);
 
   function markSessionEnding() {
     sessionEndedRef.current = true;
@@ -61,6 +90,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     remoteStreams,
     peers,
     ownPeerId,
+    waiting,
     audioEnabled,
     videoEnabled,
     toggleAudio,
@@ -72,6 +102,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     stopRecording,
     leave,
     kickPeer,
+    admitPeer,
     socket,
   } = useMediasoup({
     token,
@@ -98,6 +129,9 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       console.error(msg);
       setConnectionError(msg);
     },
+    onWaiting: (peer) => {
+      setLobbyPeers(prev => [...prev.filter(p => p.id !== peer.id), peer]);
+    }
   });
 
   const { messages, sendMessage, uploadFile, sending, bottomRef } = useChat(
@@ -105,6 +139,8 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     sessionId,
     token
   );
+
+  const { captions } = useCaptions(socket, audioEnabled, ownPeerId || null, name);
 
   const clientRecording = useClientRecording({
     token,
@@ -121,6 +157,18 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     stopRecordingSocket: stopRecording,
   });
 
+  function addFloatingSticker(
+    senderName: string,
+    emoji: string,
+    options: { streamKey: string; isLocal: boolean }
+  ) {
+    setFloatingStickers((prev) => [...prev, createFloatingSticker(senderName, emoji, options)]);
+  }
+
+  function removeFloatingSticker(id: string) {
+    setFloatingStickers((prev) => prev.filter((s) => s.id !== id));
+  }
+
   useEffect(() => {
     if (!socket) return;
 
@@ -133,15 +181,24 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       });
     };
 
-    const onSticker = ({ peerId, emoji }: { peerId: string; emoji: string }) => {
-      setPeerStickers((prev) => ({ ...prev, [peerId]: emoji }));
-      setTimeout(() => {
-        setPeerStickers((prev) => {
-          const next = { ...prev };
-          delete next[peerId];
-          return next;
-        });
-      }, 3000);
+    const onSticker = ({
+      peerId,
+      name: senderName,
+      emoji,
+    }: {
+      peerId: string;
+      name?: string;
+      emoji: string;
+    }) => {
+      if (peerId === ownPeerId) return;
+      const displayName =
+        senderName ||
+        (peerId === ownPeerId ? name : peers.find((p) => p.id === peerId)?.name) ||
+        'Guest';
+      addFloatingSticker(displayName, emoji, {
+        streamKey: peerId,
+        isLocal: peerId === ownPeerId,
+      });
     };
 
     socket.on('peer:raiseHand', onRaiseHand);
@@ -150,7 +207,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       socket.off('peer:raiseHand', onRaiseHand);
       socket.off('peer:sticker', onSticker);
     };
-  }, [socket]);
+  }, [socket, ownPeerId, name, peers]);
 
   function toggleHand() {
     const next = !handRaised;
@@ -161,16 +218,10 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
   function sendSticker(emoji: string) {
     socket?.emit('sendSticker', { emoji });
     setStickerOpen(false);
-    if (ownPeerId) {
-      setPeerStickers((prev) => ({ ...prev, [ownPeerId]: emoji }));
-      setTimeout(() => {
-        setPeerStickers((prev) => {
-          const next = { ...prev };
-          delete next[ownPeerId];
-          return next;
-        });
-      }, 3000);
-    }
+    addFloatingSticker(name, emoji, {
+      streamKey: ownPeerId || 'local',
+      isLocal: true,
+    });
   }
 
   async function handleKickParticipant(targetPeerId: string, targetName: string) {
@@ -271,6 +322,20 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
     );
   }
 
+  if (waiting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center page-shell p-6">
+        <div className="card-elevated p-10 max-w-md text-center">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center mx-auto mb-4">
+            <Loader2 className="w-7 h-7 text-indigo-500 animate-spin" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Waiting Room</h2>
+          <p className="text-muted text-sm mb-6">Please wait, the agent will admit you shortly.</p>
+        </div>
+      </div>
+    );
+  }
+
   const remotePeerIds = new Set<string>();
   for (const p of peers) {
     if (p.id && p.id !== ownPeerId) remotePeerIds.add(p.id);
@@ -288,7 +353,6 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       stream: localStream,
       isLocal: true,
       handRaised: handRaised,
-      sticker: ownPeerId ? peerStickers[ownPeerId] || null : null,
     },
     ...remoteStreams.map((r) => ({
       peerId: r.peerId,
@@ -297,7 +361,6 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       stream: r.stream,
       isLocal: false,
       handRaised: raisedHands[r.peerId],
-      sticker: peerStickers[r.peerId] || null,
     })),
   ];
 
@@ -325,6 +388,15 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
         handRaised: raisedHands[p.id] || false,
       })),
   ];
+
+  async function handleAdmit(peerId: string) {
+    try {
+      await admitPeer(peerId);
+      setLobbyPeers(prev => prev.filter(p => p.id !== peerId));
+    } catch (err) {
+      console.error('Failed to admit peer', err);
+    }
+  }
 
   return (
     <div className="h-screen flex flex-col page-shell">
@@ -396,16 +468,21 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
       </header>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Video stage */}
+        {/* Video stage or Whiteboard */}
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="flex-1 min-h-0">
-            <VideoStage
-              tiles={cameraTiles}
-              presentation={presentation}
-              ownPeerId={ownPeerId}
-              maximizedPeerId={maximizedPeerId}
-              onMaximize={setMaximizedPeerId}
-            />
+          <div className="flex-1 min-h-0 relative">
+            {showWhiteboard ? (
+              <Whiteboard socket={socket} sessionId={sessionId} />
+            ) : (
+              <VideoStage
+                tiles={cameraTiles}
+                presentation={presentation}
+                ownPeerId={ownPeerId}
+                maximizedPeerId={maximizedPeerId}
+                onMaximize={setMaximizedPeerId}
+              />
+            )}
+            <FloatingStickers items={floatingStickers} onDone={removeFloatingSticker} />
           </div>
 
           {remoteStreams.length === 0 && waitingPeers.length > 0 && (
@@ -418,6 +495,22 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
               Share the invite link — waiting for customer to join
             </p>
           )}
+
+          {/* Captions Overlay */}
+          <div className="absolute bottom-28 left-0 right-0 pointer-events-none flex flex-col items-center gap-1 z-10 px-4">
+            {captions.map((caption, i) => (
+              <div
+                key={`${caption.peerId}-${i}`}
+                className={cn(
+                  "bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-xl max-w-2xl text-center shadow-lg transition-opacity duration-300",
+                  caption.isFinal ? "opacity-100 font-medium" : "opacity-80 italic"
+                )}
+              >
+                <span className="font-bold text-indigo-300 mr-2">{caption.name}:</span>
+                <span className="text-sm md:text-base">{caption.text}</span>
+              </div>
+            ))}
+          </div>
 
           {/* Floating controls over video area bottom */}
           <div className="mt-auto pt-6 flex flex-col items-center gap-2">
@@ -435,29 +528,48 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                 ))}
               </div>
             )}
-            <div className="card-elevated rounded-full px-2 py-2 flex items-center gap-1 shadow-xl">
-              <ControlBtn active={audioEnabled} onClick={toggleAudio} off={!audioEnabled}>
+            <div className="card-elevated rounded-2xl px-2 py-2 flex items-end gap-0.5 shadow-xl max-w-[calc(100vw-2rem)] overflow-x-auto">
+              <CallControl
+                label={audioEnabled ? 'Mic' : 'Muted'}
+                active={audioEnabled}
+                off={!audioEnabled}
+                onClick={toggleAudio}
+              >
                 {audioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-              </ControlBtn>
-              <ControlBtn active={videoEnabled && !screenSharing} onClick={toggleVideo} off={!videoEnabled && !screenSharing}>
+              </CallControl>
+              <CallControl
+                label={videoEnabled || screenSharing ? 'Camera' : 'Cam off'}
+                active={videoEnabled && !screenSharing}
+                off={!videoEnabled && !screenSharing}
+                onClick={toggleVideo}
+              >
                 {videoEnabled || screenSharing ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-              </ControlBtn>
-              <ControlBtn active={screenSharing} onClick={toggleScreenShare}>
+              </CallControl>
+              <CallControl label="Screen" active={screenSharing} onClick={toggleScreenShare}>
                 <MonitorUp className="w-5 h-5" />
-              </ControlBtn>
-              <ControlBtn active={handRaised} onClick={toggleHand}>
+              </CallControl>
+              <CallControl label="Board" active={showWhiteboard} onClick={() => setShowWhiteboard((w) => !w)}>
+                <PenTool className="w-5 h-5" />
+              </CallControl>
+              <CallControl label="Hand" active={handRaised} onClick={toggleHand}>
                 <Hand className="w-5 h-5" />
-              </ControlBtn>
-              <ControlBtn active={stickerOpen} onClick={() => setStickerOpen((v) => !v)}>
+              </CallControl>
+              <CallControl label="React" active={stickerOpen} onClick={() => setStickerOpen((v) => !v)}>
                 <Smile className="w-5 h-5" />
-              </ControlBtn>
+              </CallControl>
               {!chatOpen && (
-                <ControlBtn onClick={() => setChatOpen(true)}>
+                <CallControl label="Chat" onClick={() => setChatOpen(true)}>
                   <MessageSquare className="w-5 h-5" />
-                </ControlBtn>
+                </CallControl>
+              )}
+              {role === 'AGENT' && inviteLink && (
+                <CallControl label="Share link" onClick={() => setShareOpen(true)}>
+                  <Link2 className="w-5 h-5" />
+                </CallControl>
               )}
               {role === 'AGENT' && (
-                <ControlBtn
+                <CallControl
+                  label={recording?.status === 'IN_PROGRESS' ? 'Stop rec' : 'Record'}
                   onClick={toggleRecording}
                   danger={recording?.status === 'IN_PROGRESS'}
                   disabled={recordingBusy}
@@ -469,27 +581,41 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                   ) : (
                     <Circle className="w-5 h-5" />
                   )}
-                </ControlBtn>
+                </CallControl>
               )}
-              <div className="w-px h-8 bg-slate-200 mx-1" />
+              <div className="w-px h-12 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0 self-center" />
               {role === 'AGENT' ? (
                 <button
                   onClick={handleEndCall}
-                  className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold text-sm px-5 py-2.5 rounded-full transition-colors"
+                  className="flex flex-col items-center gap-1 min-w-[52px] px-1 py-0.5"
                 >
-                  <PhoneOff className="w-4 h-4" />
-                  End call
+                  <span className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold text-sm px-4 py-2.5 rounded-full transition-colors">
+                    <PhoneOff className="w-4 h-4" />
+                    End
+                  </span>
+                  <span className="text-[10px] font-semibold text-[var(--color-text-muted)]">End call</span>
                 </button>
               ) : (
                 <button
                   onClick={handleLeave}
-                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-5 py-2.5 rounded-full transition-colors"
+                  className="flex flex-col items-center gap-1 min-w-[52px] px-1 py-0.5"
                 >
-                  <PhoneOff className="w-4 h-4" />
-                  Leave
+                  <span className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm px-4 py-2.5 rounded-full transition-colors">
+                    <PhoneOff className="w-4 h-4" />
+                    Leave
+                  </span>
+                  <span className="text-[10px] font-semibold text-[var(--color-text-muted)]">Leave</span>
                 </button>
               )}
             </div>
+            {role === 'AGENT' && inviteLink && (
+              <InviteShareMenu
+                inviteLink={inviteLink}
+                variant="none"
+                open={shareOpen}
+                onOpenChange={setShareOpen}
+              />
+            )}
           </div>
         </main>
 
@@ -520,6 +646,11 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
               >
                 <Users className="w-4 h-4" />
                 People ({participantCount})
+                {lobbyPeers.length > 0 && (
+                  <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {lobbyPeers.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setChatOpen(false)}
@@ -530,8 +661,26 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
             </div>
 
             {sideTab === 'participants' ? (
-              <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[var(--color-surface-muted)]/50">
-                {participantList.map((p) => (
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[var(--color-surface-muted)]/50">
+                {lobbyPeers.length > 0 && role === 'AGENT' && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase px-1">Waiting Room</h3>
+                    {lobbyPeers.map(p => (
+                      <div key={p.id} className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-xl px-3 py-2 border border-amber-200 shadow-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <p className="text-xs text-muted capitalize">Waiting...</p>
+                        </div>
+                        <Button size="sm" onClick={() => handleAdmit(p.id)} className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1">
+                          Admit
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase px-1">In Call</h3>
+                  {participantList.map((p) => (
                   <div
                     key={p.peerId}
                     className="flex items-center gap-3 bg-[var(--color-surface)] rounded-xl px-3 py-2.5 border border-[var(--color-border)] shadow-sm"
@@ -573,12 +722,13 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                     )}
                   </div>
                 ))}
+                </div>
               </div>
             ) : (
               <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[var(--color-surface-muted)]/50">
               {messages.length === 0 && (
-                <p className="text-center text-slate-400 text-sm py-8">No messages yet</p>
+                <p className="text-center text-muted text-sm py-8">No messages yet</p>
               )}
               {messages.map((msg) => {
                 const mine = msg.senderName === name;
@@ -587,14 +737,14 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                     <div
                       className={cn(
                         'w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold',
-                        mine ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-600'
+                        mine ? 'bg-indigo-500 text-white' : 'bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'
                       )}
                     >
                       {msg.senderName.charAt(0).toUpperCase()}
                     </div>
                     <div className={cn('max-w-[75%]', mine && 'items-end')}>
                       {!mine && (
-                        <p className="text-[11px] font-medium text-slate-500 mb-1 ml-1">
+                        <p className="text-[11px] font-medium text-[var(--color-text-muted)] mb-1 ml-1">
                           {msg.senderName}
                         </p>
                       )}
@@ -603,7 +753,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                           'rounded-2xl px-3.5 py-2 text-sm',
                           mine
                             ? 'bg-indigo-500 text-white rounded-br-md'
-                            : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
+                            : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] rounded-bl-md shadow-sm'
                         )}
                       >
                         <p>{msg.text}</p>
@@ -628,8 +778,38 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
               <div ref={bottomRef} />
             </div>
 
-            <div className="p-3 border-t border-slate-100 bg-white">
+            <div className="p-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] relative">
+              {cannedOpen && role === 'AGENT' && (
+                <div className="absolute bottom-full mb-2 w-64 bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xl rounded-xl p-2 left-4 z-20">
+                  <p className="text-xs font-semibold text-slate-500 mb-2 px-2 uppercase">Quick Replies</p>
+                  {CANNED_RESPONSES.map((r, i) => (
+                    <button
+                      key={i}
+                      className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-[var(--color-surface-muted)] text-[var(--color-text)] truncate"
+                      onClick={() => {
+                        sendMessage(r);
+                        setCannedOpen(false);
+                      }}
+                      title={r}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2 items-end">
+                {role === 'AGENT' && (
+                  <button
+                    onClick={() => setCannedOpen(!cannedOpen)}
+                    className={cn(
+                      "p-2.5 rounded-xl border transition-colors",
+                      cannedOpen ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" : "border-[var(--color-border)] text-muted hover:bg-[var(--color-surface-muted)]"
+                    )}
+                    title="Quick Replies"
+                  >
+                    <Zap className="w-5 h-5" />
+                  </button>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -644,7 +824,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+                  className="p-2.5 rounded-xl border border-[var(--color-border)] text-muted hover:bg-[var(--color-surface-muted)]"
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
@@ -659,7 +839,7 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
                     }
                   }}
                   placeholder="Write a message…"
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 bg-white"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-[var(--color-surface)] text-[var(--color-text)]"
                 />
                 <button
                   onClick={() => {
@@ -678,39 +858,5 @@ export function CallRoom({ sessionId, token, name, role, onLeave }: CallRoomProp
         )}
       </div>
     </div>
-  );
-}
-
-function ControlBtn({
-  children,
-  onClick,
-  active,
-  off,
-  danger,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  active?: boolean;
-  off?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'w-11 h-11 rounded-full flex items-center justify-center transition-all',
-        danger
-          ? 'bg-red-500 text-white hover:bg-red-600'
-          : off
-            ? 'bg-red-50 text-red-500 hover:bg-red-100'
-            : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
-        disabled && 'opacity-50 cursor-not-allowed'
-      )}
-    >
-      {children}
-    </button>
   );
 }

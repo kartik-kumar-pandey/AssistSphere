@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Hand, Maximize2, Minimize2 } from 'lucide-react';
+import { Hand, Maximize2, Minimize2, PictureInPicture } from 'lucide-react';
 
 function VideoTile({
   stream,
@@ -115,6 +115,19 @@ function VideoTile({
     }
   }
 
+  async function handlePiP() {
+    if (!videoRef.current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await videoRef.current.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error('PiP failed', err);
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -153,17 +166,27 @@ function VideoTile({
         </button>
       )}
 
-      <button
-        type="button"
-        onClick={handleFullscreen}
-        className="absolute top-2 left-2 z-20 p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
-        title={maximized ? 'Exit maximize' : 'Maximize'}
-      >
-        {maximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-      </button>
+      <div className="absolute top-2 left-2 z-20 flex gap-2">
+        <button
+          type="button"
+          onClick={handleFullscreen}
+          className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
+          title={maximized ? 'Exit maximize' : 'Maximize'}
+        >
+          {maximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={handlePiP}
+          className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
+          title="Picture-in-Picture"
+        >
+          <PictureInPicture className="w-4 h-4" />
+        </button>
+      </div>
 
       {sticker && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl animate-bounce z-20 pointer-events-none drop-shadow-lg">
+        <div className="absolute top-1/2 left-1/2 text-6xl z-20 pointer-events-none drop-shadow-lg sticker-overlay-pop">
           {sticker}
         </div>
       )}

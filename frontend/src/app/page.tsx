@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { HeroPreview } from '@/components/HeroPreview';
+import { BrandLogo } from '@/components/BrandLogo';
 
 export default function HomePage() {
   const [showKicked, setShowKicked] = useState(false);
@@ -33,11 +34,8 @@ export default function HomePage() {
 
       <nav className="border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 animate-fade-up">
-            <div className="w-10 h-10 rounded-xl btn-primary flex items-center justify-center">
-              <Video className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-bold">AssistSphere</span>
+          <div className="animate-fade-up">
+            <BrandLogo />
           </div>
           <div className="flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
             <ThemeToggle />

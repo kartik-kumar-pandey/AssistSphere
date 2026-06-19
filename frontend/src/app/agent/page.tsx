@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Video, Copy, Check, History, Clock } from 'lucide-react';
+import { ArrowLeft, Video, Check, History, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import { InviteShareMenu } from '@/components/InviteShareMenu';
 import { apiFetch, saveAuth, loadAuth } from '@/lib/utils';
 
 interface SessionRow {
@@ -26,10 +27,10 @@ export default function AgentPage() {
   const [session, setSession] = useState<{
     sessionId: string;
     inviteLink: string;
+    inviteToken: string;
     token: string;
     participantId: string;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<{ token: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -82,6 +83,8 @@ export default function AgentPage() {
         name: agentName,
         sessionId: sessionData.sessionId,
         participantId: sessionData.participantId,
+        inviteLink: sessionData.inviteLink,
+        inviteToken: sessionData.inviteToken,
         role: 'AGENT',
       });
       setSession(sessionData);
@@ -90,13 +93,6 @@ export default function AgentPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function copyLink() {
-    if (!session) return;
-    navigator.clipboard.writeText(session.inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -144,10 +140,7 @@ export default function AgentPage() {
               <p className="text-sm text-indigo-600 dark:text-indigo-400 break-all font-mono">{session.inviteLink}</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="secondary" onClick={copyLink} className="flex-1">
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied' : 'Copy'}
-              </Button>
+              <InviteShareMenu inviteLink={session.inviteLink} triggerLabel="Share link" triggerClassName="flex-1" />
               <Button onClick={() => router.push(`/call/${session.sessionId}`)} className="flex-1">
                 Join call
               </Button>
