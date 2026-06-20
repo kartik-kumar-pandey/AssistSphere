@@ -471,7 +471,7 @@ export function useMediasoup({
 
         const sock = io(WS_URL, {
           auth: { token },
-          transports: ['websocket', 'polling'],  // websocket first avoids polling→ws upgrade disconnect
+          transports: ['polling', 'websocket'],  // try polling first for maximum compatibility, then upgrade to websocket if supported
           reconnection: true,
           reconnectionAttempts: 10,
           reconnectionDelay: 1000,
