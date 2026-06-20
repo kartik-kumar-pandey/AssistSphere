@@ -146,12 +146,7 @@ async function handleSessionJoin(
       // Not yet admitted, put in lobby
       socket.join(`lobby:${sessionId}`);
       io.to(sessionId).emit('peer:waiting', { peerId, name: user.name, role: user.role });
-      
-      // Register minimal handlers to be able to be admitted
-      if (!(socket.data as SocketData).handlersRegistered) {
-        (socket.data as SocketData).handlersRegistered = true;
-      }
-      
+      // NOTE: do NOT set handlersRegistered here — handlers are registered on actual room join
       return { waiting: true, peerId };
     }
   }
@@ -494,8 +489,22 @@ function registerSessionHandlers(
     }
     admittedSet.add(targetPeerId);
 
+    // Find the target socket's actual socket and leave the lobby room
+    const lobbyRoom = `lobby:${sessionId}`;
+    const roomSockets = await io.in(lobbyRoom).fetchSockets();
+    for (const s of roomSockets) {
+      if ((s.data as SocketData).peerId === targetPeerId) {
+        s.leave(lobbyRoom);
+        break;
+      }
+    }
+
     // Tell the target socket they are admitted so they can re-request room:join
-    io.to(`lobby:${sessionId}`).emit('admitted', { peerId: targetPeerId });
+    io.to(lobbyRoom).emit('admitted', { peerId: targetPeerId });
+    // Also target directly in case they already left lobby room
+    const allSockets = await io.fetchSockets();
+    const targetSocket = allSockets.find((s) => (s.data as SocketData).peerId === targetPeerId);
+    if (targetSocket) targetSocket.emit('admitted', { peerId: targetPeerId });
     cb?.({ success: true });
   });
 

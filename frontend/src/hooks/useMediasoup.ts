@@ -471,10 +471,11 @@ export function useMediasoup({
 
         const sock = io(WS_URL, {
           auth: { token },
-          transports: ['polling', 'websocket'],  // polling first is more reliable through Nginx proxy
+          transports: ['websocket', 'polling'],  // websocket first avoids polling→ws upgrade disconnect
           reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 2000,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
           timeout: 20000,
         });
         socketRef.current = sock;
@@ -492,21 +493,24 @@ export function useMediasoup({
           if (!hasJoinedRef.current || aborted) return;
           try {
             setConnected(true);
+            // Small delay to let socket stabilize after reconnect before tearing down
+            await new Promise((res) => setTimeout(res, 300));
+            if (!sock.connected || aborted) return;
             teardownMedia();
-            const stream = localStreamRef.current;
-            if (!stream) return;
+            const freshStream = localStreamRef.current;
+            if (!freshStream) return;
             const roomResponse = await socketRequest<RoomJoinedData & { success?: boolean; waiting?: boolean }>(
               sock,
               'room:join'
             );
-            if (aborted) return;
+            if (aborted || !sock.connected) return;
             if (roomResponse.waiting) {
               setWaiting(true);
               setOwnPeerId(roomResponse.peerId);
               ownPeerIdRef.current = roomResponse.peerId;
             } else {
               setWaiting(false);
-              await setupMediasoup(roomResponse, stream);
+              await setupMediasoup(roomResponse, freshStream);
             }
             console.log('[mediasoup] reconnected and rejoined room');
           } catch (err) {
@@ -529,16 +533,24 @@ export function useMediasoup({
           if (peer) callbacksRef.current.onWaiting?.(peer);
         });
 
-        sock.on('admitted', async ({ peerId }: { peerId: string }) => {
-          if (peerId !== ownPeerIdRef.current) return;
+        sock.on('admitted', async ({ peerId: admittedId }: { peerId: string }) => {
+          if (admittedId !== ownPeerIdRef.current) return;
           try {
+            const freshStream = localStreamRef.current;
+            if (!freshStream) {
+              callbacksRef.current.onError?.('No media stream available after admission');
+              return;
+            }
             const retryResponse = await socketRequest<RoomJoinedData & { success?: boolean }>(sock, 'room:join');
             if (aborted) return;
-            setWaiting(false);
-            await setupMediasoup(retryResponse, stream);
             hasJoinedRef.current = true;
+            setWaiting(false);
+            await setupMediasoup(retryResponse, freshStream);
           } catch (e) {
             console.error('Failed to join after admitted', e);
+            callbacksRef.current.onError?.(
+              e instanceof Error ? e.message : 'Failed to set up media after admission'
+            );
           }
         });
 

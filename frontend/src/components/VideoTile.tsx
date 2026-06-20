@@ -209,7 +209,7 @@ function VideoTile({
       className={cn(
         'relative w-full h-full min-h-[120px] rounded-2xl overflow-hidden bg-slate-900 shadow-md transition-all duration-300',
         isSpeaking
-          ? 'ring-4 ring-emerald-500 animate-speaker-wave z-10'
+          ? 'ring-[3px] ring-white animate-speaker-wave z-10'
           : 'ring-1 ring-slate-200/60'
       )}
     >
@@ -219,8 +219,7 @@ function VideoTile({
         playsInline
         muted
         className={cn(
-          'absolute inset-0 w-full h-full object-cover',
-          isLocal && 'scale-x-[-1]', // Mirror local camera feed for natural view
+          'absolute inset-0 w-full h-full object-cover scale-x-[-1]', // Mirror all video for natural view (like Zoom/Meet)
           !hasVideo && 'opacity-0 pointer-events-none'
         )}
       />
