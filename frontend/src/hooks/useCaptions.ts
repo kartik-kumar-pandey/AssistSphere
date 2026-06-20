@@ -10,8 +10,11 @@ export interface Caption {
 
 export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPeerId: string | null, name: string) {
   const [captions, setCaptions] = useState<Caption[]>([]);
+  const [supported, setSupported] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
+  const lastErrorRef = useRef<string | null>(null);
   const contextRef = useRef({ socket, ownPeerId, name });
 
   useEffect(() => {
@@ -23,13 +26,11 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
 
     const handleCaption = (caption: Caption) => {
       setCaptions((prev) => {
-        // Remove older non-final captions from the same peer
         const filtered = prev.filter((c) => c.peerId !== caption.peerId || c.isFinal);
         const newCaptions = [...filtered, caption].slice(-5); // Keep last 5
         return newCaptions;
       });
 
-      // Clear final captions after 5 seconds
       if (caption.isFinal) {
         setTimeout(() => {
           setCaptions((p) => p.filter((c) => c !== caption));
@@ -49,6 +50,7 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
+      setSupported(false);
       console.warn('Speech recognition not supported in this browser');
       return;
     }
@@ -58,6 +60,11 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setError(null);
+        lastErrorRef.current = null;
+      };
 
       recognition.onresult = (event: any) => {
         let interimTranscript = '';
@@ -94,36 +101,42 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
       };
 
       recognition.onerror = (event: any) => {
+        lastErrorRef.current = event.error;
+        // Only log non-transient errors to avoid console spam
+        const transientErrors = ['no-speech', 'aborted', 'network'];
+        if (!transientErrors.includes(event.error)) {
+          console.error('Speech recognition error:', event.error);
+        }
         switch (event.error) {
           case 'no-speech':
-            // Normal during silence
             break;
           case 'aborted':
-            // User or browser stopped recognition
             break;
           case 'network':
-            // Network issue with cloud speech service — retry handled by onend
+            // Suppress the UI error overlay as requested. We still back off and attempt reconnection.
             break;
           case 'audio-capture':
-            // No microphone available
+            setError('No microphone found.');
             break;
           case 'not-allowed':
+            setError('Microphone permission blocked. Please allow microphone access for captions.');
             isListeningRef.current = false;
             break;
           default:
-            console.error('Speech recognition error:', event.error);
+            setError(`Speech recognition error: ${event.error}`);
         }
       };
 
       recognition.onend = () => {
         if (isListeningRef.current) {
+          const delay = lastErrorRef.current === 'network' ? 5000 : 200;
           setTimeout(() => {
             try {
               recognition.start();
             } catch (err) {
               console.log('Recognition already running');
             }
-          }, 200);
+          }, delay);
         }
       };
 
@@ -156,5 +169,5 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
     };
   }, [audioEnabled]);
 
-  return { captions };
+  return { captions, supported, error };
 }

@@ -116,7 +116,7 @@ export default function AgentPage() {
         {!session ? (
           <Card glow>
             <form onSubmit={handleAuth} className="space-y-5">
-              <Input id="name" label="Your name" placeholder="Sarah Chen" value={name} onChange={(e) => setName(e.target.value)} required disabled={!!loggedInUser} />
+              <Input id="name" label="Your name" placeholder="Kartik Pandey" value={name} onChange={(e) => setName(e.target.value)} required disabled={!!loggedInUser} />
               {loggedInUser && (
                 <p className="text-sm text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl px-3 py-2">
                   Signed in as {loggedInUser.name}

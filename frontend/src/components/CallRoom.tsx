@@ -140,7 +140,7 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
     token
   );
 
-  const { captions } = useCaptions(socket, audioEnabled, ownPeerId || null, name);
+  const { captions, supported: captionsSupported, error: captionsError } = useCaptions(socket, audioEnabled, ownPeerId || null, name);
 
   const clientRecording = useClientRecording({
     token,
@@ -472,7 +472,12 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="flex-1 min-h-0 relative">
             {showWhiteboard ? (
-              <Whiteboard socket={socket} sessionId={sessionId} />
+              <Whiteboard
+                socket={socket}
+                sessionId={sessionId}
+                ownPeerId={ownPeerId || null}
+                name={name}
+              />
             ) : (
               <VideoStage
                 tiles={cameraTiles}
@@ -483,6 +488,32 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
               />
             )}
             <FloatingStickers items={floatingStickers} onDone={removeFloatingSticker} />
+
+            {/* Captions Overlay */}
+            <div className="absolute bottom-6 left-0 right-0 pointer-events-none flex flex-col items-center gap-1.5 z-20 px-4">
+              {!captionsSupported && (
+                <div className="bg-amber-600/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md pointer-events-auto">
+                  Live captions are not supported in this browser (Chrome, Safari, or Edge recommended).
+                </div>
+              )}
+              {captionsSupported && captionsError && (
+                <div className="bg-red-600/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md pointer-events-auto">
+                  {captionsError}
+                </div>
+              )}
+              {captions.map((caption, i) => (
+                <div
+                  key={`${caption.peerId}-${i}`}
+                  className={cn(
+                    "bg-black/70 backdrop-blur-md text-white px-4 py-2 rounded-xl max-w-2xl text-center shadow-lg transition-opacity duration-300 pointer-events-auto",
+                    caption.isFinal ? "opacity-100 font-medium" : "opacity-85 italic"
+                  )}
+                >
+                  <span className="font-bold text-indigo-300 mr-2">{caption.name}:</span>
+                  <span className="text-sm md:text-base">{caption.text}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {remoteStreams.length === 0 && waitingPeers.length > 0 && (
@@ -495,22 +526,6 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
               Share the invite link — waiting for customer to join
             </p>
           )}
-
-          {/* Captions Overlay */}
-          <div className="absolute bottom-28 left-0 right-0 pointer-events-none flex flex-col items-center gap-1 z-10 px-4">
-            {captions.map((caption, i) => (
-              <div
-                key={`${caption.peerId}-${i}`}
-                className={cn(
-                  "bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-xl max-w-2xl text-center shadow-lg transition-opacity duration-300",
-                  caption.isFinal ? "opacity-100 font-medium" : "opacity-80 italic"
-                )}
-              >
-                <span className="font-bold text-indigo-300 mr-2">{caption.name}:</span>
-                <span className="text-sm md:text-base">{caption.text}</span>
-              </div>
-            ))}
-          </div>
 
           {/* Floating controls over video area bottom */}
           <div className="mt-auto pt-6 flex flex-col items-center gap-2">

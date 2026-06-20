@@ -28,6 +28,85 @@ function VideoTile({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
   const [needsInteraction, setNeedsInteraction] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Audio stream analyzer for active speaker highlighting
+  useEffect(() => {
+    if (!stream) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack || audioTrack.readyState === 'ended') {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    let audioContext: AudioContext | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let analyser: AnalyserNode | null = null;
+    let intervalId: any = null;
+
+    const startAnalysis = () => {
+      try {
+        const ctx = new AudioContextClass();
+        audioContext = ctx;
+        const audioStream = new MediaStream([audioTrack]);
+        source = ctx.createMediaStreamSource(audioStream);
+        const node = ctx.createAnalyser();
+        analyser = node;
+        node.fftSize = 256;
+        source?.connect(node);
+
+        const bufferLength = node.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        let speakingThrottle = 0;
+        const checkVolume = () => {
+          if (!analyser) return;
+          analyser.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / bufferLength;
+
+          // Volume threshold to determine speaking (typical background noise is < 5)
+          const speaking = average > 10;
+          if (speaking) {
+            speakingThrottle = 10; // keep border active for ~150ms to prevent rapid flickering
+            setIsSpeaking(true);
+          } else {
+            if (speakingThrottle > 0) {
+              speakingThrottle--;
+            } else {
+              setIsSpeaking(false);
+            }
+          }
+        };
+
+        intervalId = setInterval(checkVolume, 70);
+      } catch (err) {
+        console.error('Audio analysis error:', err);
+      }
+    };
+
+    startAnalysis();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      if (source) source.disconnect();
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+      }
+      setIsSpeaking(false);
+    };
+  }, [stream]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -48,10 +127,8 @@ function VideoTile({
           videoEl.srcObject = new MediaStream([videoTrack]);
           videoEl.play().catch(() => setNeedsInteraction(true));
 
-          // Poll via rAF until the video element actually has frames
           cancelAnimationFrame(rafId);
           const checkVideo = () => {
-            // readyState >= 2 means HAVE_CURRENT_DATA (actual frames available)
             if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
               setHasVideo(true);
             } else {
@@ -61,12 +138,10 @@ function VideoTile({
           rafId = requestAnimationFrame(checkVideo);
           cleanups.push(() => cancelAnimationFrame(rafId));
 
-          // Also catch the 'playing' event as a fast-path
           const onPlaying = () => setHasVideo(true);
           videoEl.addEventListener('playing', onPlaying);
           cleanups.push(() => videoEl.removeEventListener('playing', onPlaying));
 
-          // Resume when track unmutes
           const onUnmute = () => {
             videoEl.play().catch(() => {});
             setHasVideo(true);
@@ -131,7 +206,12 @@ function VideoTile({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-[120px] rounded-2xl overflow-hidden bg-slate-900 shadow-md ring-1 ring-slate-200/60"
+      className={cn(
+        'relative w-full h-full min-h-[120px] rounded-2xl overflow-hidden bg-slate-900 shadow-md transition-all duration-300',
+        isSpeaking
+          ? 'ring-4 ring-emerald-500 animate-speaker-wave z-10'
+          : 'ring-1 ring-slate-200/60'
+      )}
     >
       <video
         ref={videoRef}
@@ -140,6 +220,7 @@ function VideoTile({
         muted
         className={cn(
           'absolute inset-0 w-full h-full object-cover',
+          isLocal && 'scale-x-[-1]', // Mirror local camera feed for natural view
           !hasVideo && 'opacity-0 pointer-events-none'
         )}
       />
@@ -186,7 +267,7 @@ function VideoTile({
       </div>
 
       {sticker && (
-        <div className="absolute top-1/2 left-1/2 text-6xl z-20 pointer-events-none drop-shadow-lg sticker-overlay-pop">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-6xl z-20 pointer-events-none drop-shadow-lg sticker-overlay-pop">
           {sticker}
         </div>
       )}
@@ -199,9 +280,12 @@ function VideoTile({
 
       <div className="absolute bottom-0 inset-x-0 px-3 py-2.5 bg-gradient-to-t from-black/60 via-black/30 to-transparent">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-white drop-shadow-sm truncate">
+          <span className="text-sm font-medium text-white drop-shadow-sm truncate flex items-center gap-1.5">
             {name}
             {isLocal && <span className="text-white/70 font-normal"> · You</span>}
+            {isSpeaking && (
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399] shrink-0" />
+            )}
           </span>
           <span
             className={cn(

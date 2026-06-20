@@ -184,7 +184,7 @@ async function handleSessionJoin(
 
   if (!(socket.data as SocketData).handlersRegistered) {
     registerMediaHandlers(io, socket, sessionId, peerId, user);
-    registerChatHandlers(io, socket, sessionId, user);
+    registerChatHandlers(io, socket, sessionId, peerId, user);
     registerSessionHandlers(io, socket, sessionId, peerId, user);
     (socket.data as SocketData).handlersRegistered = true;
   }
@@ -347,7 +347,7 @@ function registerMediaHandlers(
   });
 }
 
-function registerChatHandlers(io: Server, socket: Socket, sessionId: string, user: JwtPayload) {
+function registerChatHandlers(io: Server, socket: Socket, sessionId: string, peerId: string, user: JwtPayload) {
   socket.on('chat:message', async ({ text }: { text: string }) => {
     if (!text?.trim()) return;
 
@@ -411,6 +411,15 @@ function registerChatHandlers(io: Server, socket: Socket, sessionId: string, use
     } catch {
       incrementErrors();
     }
+  });
+
+  socket.on('whiteboard:pointer', ({ pointer, button, username }: { pointer: { x: number; y: number } | null; button: string; username: string }) => {
+    socket.to(sessionId).emit('whiteboard:pointer:sync', {
+      peerId,
+      pointer,
+      button,
+      username,
+    });
   });
 }
 

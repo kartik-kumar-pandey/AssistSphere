@@ -447,7 +447,21 @@ export function useMediasoup({
 
     async function run() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        } catch (mediaErr: unknown) {
+          const err = mediaErr as DOMException;
+          if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+            throw new Error('Camera/microphone access denied. Please check browser permissions and refresh.');
+          } else if (err.name === 'NotFoundError') {
+            throw new Error('No camera or microphone found on this device.');
+          } else if (err.name === 'OverconstrainedError') {
+            throw new Error('Camera/microphone constraints not supported by your device.');
+          } else {
+            throw new Error(`Media permission error: ${err.message || 'Unknown error'}`);
+          }
+        }
         if (aborted) {
           stream.getTracks().forEach((t) => t.stop());
           return;

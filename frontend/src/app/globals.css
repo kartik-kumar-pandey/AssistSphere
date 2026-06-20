@@ -271,3 +271,20 @@
 .sticker-snake-body {
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.15));
 }
+
+/* Waving glowing border animation for active speakers (similar to Google Meet / Zoom) */
+@keyframes speaker-wave {
+  0% {
+    box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.6), 0 0 0 0px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.4), 0 0 0 12px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0px rgba(16, 185, 129, 0), 0 0 0 0px rgba(16, 185, 129, 0);
+  }
+}
+
+.animate-speaker-wave {
+  animation: speaker-wave 1.6s infinite cubic-bezier(0.25, 0.8, 0.25, 1);
+}
