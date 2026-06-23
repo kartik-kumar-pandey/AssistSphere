@@ -23,10 +23,10 @@ scrape_configs:
 
   # ── Instance 1 — Node.js app metrics ─────────────────────
   # Your Express app exposes /metrics via prom-client
-  # Replace INSTANCE1_PRIVATE_IP with the internal IP of Instance 1
+  # Replace 10.0.0.54 with the internal IP of Instance 1
   - job_name: 'assistsphere_backend'
     static_configs:
-      - targets: ['INSTANCE1_PRIVATE_IP:4000']
+      - targets: ['10.0.0.54:4000']
     metrics_path: /metrics
     scheme: http
 
@@ -37,7 +37,7 @@ scrape_configs:
   #   sudo systemctl enable --now node_exporter (after creating systemd service)
   - job_name: 'node_instance1'
     static_configs:
-      - targets: ['INSTANCE1_PRIVATE_IP:9100']
+      - targets: ['10.0.0.54:9100']
     labels:
       instance: 'instance1'
 

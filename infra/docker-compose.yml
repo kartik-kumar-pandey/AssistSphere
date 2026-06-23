@@ -34,8 +34,6 @@ services:
     network_mode: host          # TURN needs host networking for UDP media ports
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
-    environment:
-      - DETECT_EXTERNAL_IP=yes
     logging:
       driver: json-file
       options:
