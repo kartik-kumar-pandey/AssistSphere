@@ -8,3 +8,4 @@ uploads/
 recordings/
 .DS_Store
 *.tsbuildinfo
+backend/oci_api_key.pem
