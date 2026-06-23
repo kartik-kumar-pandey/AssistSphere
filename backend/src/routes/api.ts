@@ -16,7 +16,7 @@ import {
   getActiveSessions,
   getAllSessions,
 } from '../services/session.service.js';
-import { getRecording, getSessionRecordings, saveRecordingFile } from '../services/recording.service.js';
+import { getRecording, getSessionRecordings, saveRecordingFile, decryptRecordingFile } from '../services/recording.service.js';
 import { registerUser, loginUser } from '../services/user.service.js';
 import { getBranding, updateBranding } from '../services/branding.service.js';
 import { incrementErrors } from '../metrics/prometheus.js';
@@ -354,7 +354,7 @@ ${transcript}`;
       // Call NVIDIA API
       const invoke_url = "https://integrate.api.nvidia.com/v1/chat/completions";
       const headers = {
-        "Authorization": "Bearer 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",
+        "Authorization": `Bearer ${process.env.NVIDIA_API_KEY ?? ''}`,
         "Content-Type": "application/json"
       };
       
@@ -500,12 +500,23 @@ ${transcript}`;
       if (!fs.existsSync(recording.filePath)) {
         return res.status(404).json({ error: 'Recording file not found' });
       }
-      res.download(recording.filePath, `recording-${recording.id}.webm`);
+
+      // Decrypt on-the-fly — the client always receives plain .webm
+      const plaintext = await decryptRecordingFile(recording.id);
+
+      res.setHeader('Content-Type', 'video/webm');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="recording-${recording.id}.webm"`
+      );
+      res.setHeader('Content-Length', plaintext.length);
+      res.end(plaintext);
     } catch {
       incrementErrors();
       res.status(500).json({ error: 'Download failed' });
     }
   });
+
 
   // Admin routes
   router.get('/admin/sessions/live', authMiddleware, requireRole(Role.ADMIN), async (_req, res) => {

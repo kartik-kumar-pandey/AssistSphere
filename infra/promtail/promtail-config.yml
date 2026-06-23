@@ -1,0 +1,53 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+
+  # ── Docker container logs on Instance 2 ──────────────────
+  - job_name: docker_containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        regex:         '/(.*)'
+        target_label:  container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label:  service
+    pipeline_stages:
+      - docker: {}
+
+  # ── System logs on Instance 2 ─────────────────────────────
+  - job_name: syslog_instance2
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job:      syslog
+          instance: instance2
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '(?P<timestamp>\w+ \d+ \d+:\d+:\d+) (?P<hostname>\S+) (?P<service>\S+)\[?(?P<pid>\d*)\]?: (?P<message>.*)'
+      - labels:
+          hostname:
+          service:
+
+  # ── PM2 / Node.js logs from Instance 1 ───────────────────
+  # Option A: Mount Instance 1's PM2 log dir over NFS or sshfs
+  # Option B: Use Promtail on Instance 1 directly (lighter)
+  #
+  # Uncomment and set the correct path when ready:
+  # - job_name: pm2_instance1
+  #   static_configs:
+  #     - targets: ['localhost']
+  #       labels:
+  #         job:      pm2
+  #         instance: instance1
+  #         __path__: /mnt/instance1-logs/*.log

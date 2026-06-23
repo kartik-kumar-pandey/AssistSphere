@@ -34,4 +34,8 @@ export const config = {
   },
   uploadsDir: 'uploads',
   recordingsDir: 'recordings',
+  // Master key for wrapping per-recording encryption keys.
+  // Must be a 64-character hex string (32 bytes = 256 bits).
+  // Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  recordingMasterKey: process.env.RECORDING_MASTER_KEY || '',
 };

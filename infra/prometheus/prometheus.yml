@@ -1,0 +1,60 @@
+global:
+  scrape_interval:     15s   # How often to scrape
+  evaluation_interval: 15s   # How often to evaluate rules
+
+# ── Alerting ─────────────────────────────────────────────────
+# (Optional: connect to Alertmanager later)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# ── Rule files ───────────────────────────────────────────────
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# ── Scrape configs ───────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ── Instance 1 — Node.js app metrics ─────────────────────
+  # Your Express app exposes /metrics via prom-client
+  # Replace INSTANCE1_PRIVATE_IP with the internal IP of Instance 1
+  - job_name: 'assistsphere_backend'
+    static_configs:
+      - targets: ['INSTANCE1_PRIVATE_IP:4000']
+    metrics_path: /metrics
+    scheme: http
+
+  # ── Instance 1 — System metrics (Node Exporter) ──────────
+  # Install Node Exporter natively on Instance 1:
+  #   wget https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-arm64.tar.gz
+  #   tar xvf node_exporter-*.tar.gz && sudo mv node_exporter /usr/local/bin/
+  #   sudo systemctl enable --now node_exporter (after creating systemd service)
+  - job_name: 'node_instance1'
+    static_configs:
+      - targets: ['INSTANCE1_PRIVATE_IP:9100']
+    labels:
+      instance: 'instance1'
+
+  # ── Instance 2 — System metrics (Node Exporter in Docker) ─
+  - job_name: 'node_instance2'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+    labels:
+      instance: 'instance2'
+
+  # ── Nginx metrics (via nginx-prometheus-exporter) ─────────
+  # Uncomment if you add nginx-prometheus-exporter sidecar to docker-compose
+  # - job_name: 'nginx'
+  #   static_configs:
+  #     - targets: ['nginx-exporter:9113']
+
+  # ── Loki self-monitoring ──────────────────────────────────
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']

@@ -51,8 +51,17 @@ interface UseMediasoupOptions {
   onWaiting?: (peer: PeerInfo) => void;
 }
 
-// mediasoup-demo uses empty iceServers — server provides ICE candidates
-const ICE_SERVERS: RTCIceServer[] = [];
+// TURN server config — set NEXT_PUBLIC_TURN_URL in .env.local (or Vercel env vars)
+// Leave empty for local dev; required for production when users are behind strict NAT.
+const ICE_SERVERS: RTCIceServer[] = process.env.NEXT_PUBLIC_TURN_URL
+  ? [
+      {
+        urls:       process.env.NEXT_PUBLIC_TURN_URL,
+        username:   process.env.NEXT_PUBLIC_TURN_USERNAME ?? '',
+        credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL ?? '',
+      },
+    ]
+  : [];
 
 function waitForSocketConnect(sock: Socket, timeoutMs = 20000): Promise<void> {
   return new Promise((resolve, reject) => {

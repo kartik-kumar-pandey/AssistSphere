@@ -101,14 +101,19 @@ model Event {
 }
 
 model Recording {
-  id        String          @id @default(cuid())
-  sessionId String
-  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  status    RecordingStatus @default(IN_PROGRESS)
-  filePath  String?
-  fileUrl   String?
-  startedAt DateTime        @default(now())
-  endedAt   DateTime?
+  id               String          @id @default(cuid())
+  sessionId        String
+  session          Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status           RecordingStatus @default(IN_PROGRESS)
+  filePath         String?
+  fileUrl          String?
+  startedAt        DateTime        @default(now())
+  endedAt          DateTime?
+  // Encryption metadata (AES-256-GCM)
+  encryptionKeyEnc String?         // per-recording AES key, itself encrypted by the master key (hex)
+  encryptionIv     String?         // 12-byte IV used during encryption (hex)
+  encryptionTag    String?         // 16-byte GCM auth tag (hex)
+  encrypted        Boolean         @default(false)
 
   @@index([sessionId])
 }
