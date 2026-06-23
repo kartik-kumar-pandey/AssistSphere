@@ -11,6 +11,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": true,
+    "typeRoots": ["./node_modules/@types", "../node_modules/@types"],
     "noEmitOnError": false
   },
   "include": ["src/**/*"],
