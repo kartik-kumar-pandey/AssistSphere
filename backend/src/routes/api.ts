@@ -20,24 +20,14 @@ import { getRecording, getSessionRecordings, saveRecordingFile, decryptRecording
 import { registerUser, loginUser } from '../services/user.service.js';
 import { getBranding, updateBranding } from '../services/branding.service.js';
 import { incrementErrors } from '../metrics/prometheus.js';
+import { uploadToStorage, getSignedUrl } from '../services/storage.service.js';
 
 function paramId(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-const uploadDir = path.join(process.cwd(), config.uploadsDir);
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [
@@ -407,20 +397,25 @@ ${transcript}`;
       try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-        const session = await prisma.session.findUnique({ where: { id: paramId(req.params.id) } });
+        const sessionId = paramId(req.params.id);
+        const session = await prisma.session.findUnique({ where: { id: sessionId } });
         if (!session || session.status !== 'ACTIVE') {
-          fs.unlinkSync(req.file.path);
           return res.status(400).json({ error: 'Session not active' });
         }
 
+        const uniqueFilename = `${Date.now()}-${req.file.originalname}`;
+        const objectName = `uploads/${sessionId}/${uniqueFilename}`;
+        
+        await uploadToStorage(objectName, req.file.buffer, req.file.mimetype);
+
         const fileRecord = await prisma.sessionFile.create({
           data: {
-            sessionId: paramId(req.params.id),
-            filename: req.file.filename,
+            sessionId: sessionId,
+            filename: uniqueFilename,
             originalName: req.file.originalname,
             uploader: req.user!.name,
             uploaderRole: req.user!.role,
-            url: `/api/files/${req.file.filename}`,
+            url: `/api/files/${uniqueFilename}`,
             mimeType: req.file.mimetype,
             size: req.file.size,
           },
@@ -434,10 +429,21 @@ ${transcript}`;
     }
   );
 
-  router.get('/files/:filename', (req, res) => {
-    const filePath = path.join(uploadDir, paramId(req.params.filename));
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-    res.sendFile(filePath);
+  router.get('/files/:filename', async (req, res) => {
+    try {
+      const filename = paramId(req.params.filename);
+      const fileRecord = await prisma.sessionFile.findFirst({
+        where: { filename }
+      });
+      if (!fileRecord) return res.status(404).json({ error: 'File not found' });
+
+      const objectName = `uploads/${fileRecord.sessionId}/${filename}`;
+      const signedUrl = await getSignedUrl(objectName);
+      res.redirect(signedUrl);
+    } catch {
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to retrieve file URL' });
+    }
   });
 
   // Recordings
@@ -496,10 +502,6 @@ ${transcript}`;
 
       const session = await assertSessionAccess(req, recording.sessionId);
       if (!session) return res.status(403).json({ error: 'Access denied' });
-
-      if (!fs.existsSync(recording.filePath)) {
-        return res.status(404).json({ error: 'Recording file not found' });
-      }
 
       // Decrypt on-the-fly — the client always receives plain .webm
       const plaintext = await decryptRecordingFile(recording.id);

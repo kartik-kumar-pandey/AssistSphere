@@ -38,15 +38,15 @@ scrape_configs:
   - job_name: 'node_instance1'
     static_configs:
       - targets: ['10.0.0.54:9100']
-    labels:
-      instance: 'instance1'
+        labels:
+          instance: 'instance1'
 
   # ── Instance 2 — System metrics (Node Exporter in Docker) ─
   - job_name: 'node_instance2'
     static_configs:
       - targets: ['host.docker.internal:9100']
-    labels:
-      instance: 'instance2'
+        labels:
+          instance: 'instance2'
 
   # ── Nginx metrics (via nginx-prometheus-exporter) ─────────
   # Uncomment if you add nginx-prometheus-exporter sidecar to docker-compose

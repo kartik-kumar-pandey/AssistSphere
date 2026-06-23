@@ -11,9 +11,6 @@ import { setupSocketServer, forceEndSession } from './socket/index.js';
 import { register } from './metrics/prometheus.js';
 
 async function main() {
-  fs.mkdirSync(path.join(process.cwd(), config.uploadsDir), { recursive: true });
-  fs.mkdirSync(path.join(process.cwd(), config.recordingsDir), { recursive: true });
-
   await connectDb();
   console.log('Database connected');
 

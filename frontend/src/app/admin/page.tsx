@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
-import { apiFetch, saveAuth, loadAuth, clearAuth, cn } from '@/lib/utils';
+import { apiFetch, saveAuth, loadAuth, clearAuth, cn, API_URL } from '@/lib/utils';
 import { useBranding } from '@/components/BrandingProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -609,7 +609,7 @@ export default function AdminPage() {
           <div className="inline-flex flex-col items-center gap-2 px-6 py-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 text-center">
             <Activity className="w-6 h-6 text-indigo-500 mb-1" />
             <p className="text-indigo-900/80 dark:text-indigo-200/70 text-sm font-medium">Export raw monitoring data</p>
-            <a href="http://localhost:4000/metrics" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-mono text-xs bg-white dark:bg-indigo-950 px-3 py-1.5 rounded-lg shadow-sm hover:underline transition-all">
+            <a href="https://assistsphere-api.duckdns.org/metrics" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 font-mono text-xs bg-white dark:bg-indigo-950 px-3 py-1.5 rounded-lg shadow-sm hover:underline transition-all">
               /metrics endpoint
             </a>
           </div>

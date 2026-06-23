@@ -10,6 +10,7 @@ import {
   encryptBuffer,
   decryptBuffer,
 } from './encryption.service.js';
+import { uploadToStorage, downloadFromStorage } from './storage.service.js';
 
 const activeRecordings = new Map<string, { sessionId: string; startedAt: Date }>();
 
@@ -96,18 +97,17 @@ export async function saveRecordingFile(
   const combinedIv  = `${fileIvHex}:${keyIvHex}`;
   const combinedTag = `${fileTagHex}:${keyTagHex}`;
 
-  // Step 4: Write ciphertext to disk (NOT plaintext)
-  const dir      = path.join(process.cwd(), config.recordingsDir, sessionId);
-  fs.mkdirSync(dir, { recursive: true });
-  const filePath = path.join(dir, `${recordingId}.enc`);
-  fs.writeFileSync(filePath, ciphertext);
+  // Step 4: Upload ciphertext to OCI (NOT local disk)
+  const objectName = `recordings/${sessionId}/${recordingId}.enc`;
+  console.log(`⏳ Uploading encrypted recording ${recordingId} to OCI Object Storage...`);
+  await uploadToStorage(objectName, ciphertext, 'application/octet-stream');
 
   // Step 5: Persist encryption metadata alongside status update
   await (prisma.recording.update as Function)({
     where: { id: recordingId },
     data: {
       status:           RecordingStatus.READY,
-      filePath,
+      filePath:         objectName, // Store OCI object name here
       fileUrl:          `/api/recordings/${recordingId}/download`,
       encryptionKeyEnc: encryptedKeyHex,
       encryptionIv:     combinedIv,
@@ -124,7 +124,7 @@ export async function saveRecordingFile(
     },
   });
 
-  return { filePath, fileUrl: `/api/recordings/${recordingId}/download` };
+  return { filePath: objectName, fileUrl: `/api/recordings/${recordingId}/download` };
 }
 
 /**
@@ -136,17 +136,20 @@ export async function decryptRecordingFile(recordingId: string): Promise<Buffer>
   const recording: any = await prisma.recording.findUnique({ where: { id: recordingId } });
   if (!recording || !recording.filePath) throw new Error('Recording not found');
 
-  if (!recording.encrypted) {
-    // Legacy unencrypted recording — serve as-is for backwards compatibility
-    return fs.readFileSync(recording.filePath as string);
-  }
-
   const { encryptionKeyEnc, encryptionIv, encryptionTag, filePath } = recording as {
     encryptionKeyEnc: string | null;
     encryptionIv: string | null;
     encryptionTag: string | null;
     filePath: string;
   };
+
+  // If legacy unencrypted recording or local file exists for backwards compatibility
+  if (!recording.encrypted) {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath);
+    }
+    throw new Error('Recording file not found on disk');
+  }
 
   if (!encryptionKeyEnc || !encryptionIv || !encryptionTag) {
     throw new Error('Encryption metadata missing — cannot decrypt this recording');
@@ -159,9 +162,11 @@ export async function decryptRecordingFile(recordingId: string): Promise<Buffer>
   // Unwrap the per-recording DEK using the master key
   const dek = unwrapKey(encryptionKeyEnc, keyIvHex, keyTagHex);
 
-  // Read ciphertext from disk and decrypt
-  const ciphertext = fs.readFileSync(filePath);
-  return decryptBuffer(ciphertext, dek, fileIvHex, fileTagHex);
+  // Retrieve ciphertext from OCI Object Storage
+  console.log(`⏳ Downloading encrypted recording ${recordingId} from OCI...`);
+  const ciphertextBuffer = await downloadFromStorage(filePath);
+  
+  return decryptBuffer(ciphertextBuffer, dek, fileIvHex, fileTagHex);
 }
 
 export async function getRecording(recordingId: string) {
