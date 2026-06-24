@@ -11,20 +11,12 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { HeroPreview } from '@/components/HeroPreview';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Card } from '@/components/ui/Card';
-
-interface DemoReaction {
-  id: string;
-  emoji: string;
-  left: number;
-  originSide: 'left' | 'right';
-  delayMs: number;
-}
+import { FloatingStickers, createFloatingSticker, type FloatingStickerItem } from '@/components/FloatingStickers';
 
 export default function HomePage() {
   const [showKicked, setShowKicked] = useState(false);
   const [activeTab, setActiveTab] = useState<'video' | 'screenshare' | 'summary' | 'observability'>('video');
-  const [demoReactions, setDemoReactions] = useState<DemoReaction[]>([]);
-  const reactionIdRef = useRef(0);
+  const [floatingStickers, setFloatingStickers] = useState<FloatingStickerItem[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('kicked')) {
@@ -34,23 +26,17 @@ export default function HomePage() {
   }, []);
 
   const triggerReaction = (emoji: string) => {
-    const id = `demo-${Date.now()}-${reactionIdRef.current++}`;
-    const left = 10 + Math.random() * 80;
-    const originSide = Math.random() > 0.5 ? 'left' : 'right';
-    const newReaction: DemoReaction = {
-      id,
-      emoji,
-      left,
-      originSide,
-      delayMs: 0
-    };
-    
-    setDemoReactions(prev => [...prev, newReaction]);
+    setFloatingStickers((prev) => [
+      ...prev,
+      createFloatingSticker('Guest User', emoji, {
+        streamKey: 'demo',
+        isLocal: true,
+      }),
+    ]);
+  };
 
-    // Cleanup after animation completes
-    setTimeout(() => {
-      setDemoReactions(prev => prev.filter(r => r.id !== id));
-    }, 6200);
+  const removeFloatingSticker = (id: string) => {
+    setFloatingStickers((prev) => prev.filter((s) => s.id !== id));
   };
 
   return (
@@ -332,22 +318,7 @@ export default function HomePage() {
 
               {/* Floating stickers container */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none z-20">
-                {demoReactions.map(r => (
-                  <div
-                    key={r.id}
-                    className={`absolute bottom-10 pointer-events-none ${
-                      r.originSide === 'left' ? 'sticker-snake-left' : 'sticker-snake-right'
-                    }`}
-                    style={{ left: `${r.left}%` }}
-                  >
-                    <div className="flex flex-col items-center gap-1 sticker-snake-body">
-                      <span className="text-4xl md:text-5xl drop-shadow-2xl sticker-snake-emoji">{r.emoji}</span>
-                      <span className="sticker-name-badge px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white whitespace-nowrap">
-                        Guest User
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                <FloatingStickers items={floatingStickers} onDone={removeFloatingSticker} />
               </div>
 
               <div className="z-10 text-center text-xs text-white/40 border border-white/5 bg-white/5 backdrop-blur-md rounded-xl p-4 py-8 self-center max-w-sm pointer-events-none">
