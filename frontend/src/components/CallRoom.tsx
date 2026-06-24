@@ -217,7 +217,6 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
 
   function sendSticker(emoji: string) {
     socket?.emit('sendSticker', { emoji });
-    setStickerOpen(false);
     addFloatingSticker(name, emoji, {
       streamKey: ownPeerId || 'local',
       isLocal: true,
@@ -485,6 +484,8 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
                 ownPeerId={ownPeerId}
                 maximizedPeerId={maximizedPeerId}
                 onMaximize={setMaximizedPeerId}
+                socket={socket}
+                role={role}
               />
             )}
             <FloatingStickers items={floatingStickers} onDone={removeFloatingSticker} />

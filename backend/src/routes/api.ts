@@ -169,6 +169,50 @@ export function createApiRouter(onForceEnd?: (sessionId: string) => void): Route
     }
   });
 
+  // Join/Re-join an active session as an agent
+  router.post('/sessions/:id/join', authMiddleware, requireRole(Role.AGENT), async (req: AuthRequest, res: Response) => {
+    try {
+      const sessionId = paramId(req.params.id);
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+        include: { participants: { where: { role: Role.AGENT, leftAt: null } } }
+      });
+      if (!session) return res.status(404).json({ error: 'Session not found' });
+      if (session.status !== 'ACTIVE') return res.status(410).json({ error: 'Session has ended' });
+
+      // Find if this agent is already a participant, or create one
+      let participant = session.participants.find(p => p.name === req.user!.name);
+      if (!participant) {
+        participant = await prisma.participant.create({
+          data: {
+            sessionId,
+            name: req.user!.name,
+            role: Role.AGENT,
+          }
+        });
+      }
+
+      const token = signToken({
+        sub: participant.id,
+        role: Role.AGENT,
+        sessionId: session.id,
+        name: req.user!.name,
+        participantId: participant.id,
+      });
+
+      res.json({
+        sessionId: session.id,
+        token,
+        participantId: participant.id,
+        inviteToken: session.inviteToken,
+        inviteLink: `${config.frontendUrl}/join/${session.inviteToken}`,
+      });
+    } catch (err) {
+      incrementErrors();
+      res.status(500).json({ error: 'Failed to join session as agent' });
+    }
+  });
+
   // Invite link for active session (agent in call)
   router.get(
     '/sessions/:id/invite-link',

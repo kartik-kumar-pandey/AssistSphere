@@ -11,8 +11,11 @@ import { setupSocketServer, forceEndSession } from './socket/index.js';
 import { register } from './metrics/prometheus.js';
 
 async function main() {
+  console.log('⏳ Starting backend server...');
+  console.log('⏳ Connecting to Database...');
+  const startDb = Date.now();
   await connectDb();
-  console.log('Database connected');
+  console.log(`✅ Database connected in ${Date.now() - startDb}ms`);
 
   const app = express();
   const server = http.createServer(app);

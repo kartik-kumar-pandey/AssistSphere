@@ -463,10 +463,17 @@ export function useMediasoup({
           const err = mediaErr as DOMException;
           if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
             throw new Error('Camera/microphone access denied. Please check browser permissions and refresh.');
-          } else if (err.name === 'NotFoundError') {
-            throw new Error('No camera or microphone found on this device.');
-          } else if (err.name === 'OverconstrainedError') {
-            throw new Error('Camera/microphone constraints not supported by your device.');
+          } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+            // Fallback: try audio-only, then video-only
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            } catch {
+              try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+              } catch {
+                throw new Error('No camera or microphone found on this device.');
+              }
+            }
           } else {
             throw new Error(`Media permission error: ${err.message || 'Unknown error'}`);
           }
@@ -477,6 +484,8 @@ export function useMediasoup({
         }
         localStreamRef.current = stream;
         setLocalStream(stream);
+        setAudioEnabled(stream.getAudioTracks().length > 0);
+        setVideoEnabled(stream.getVideoTracks().length > 0);
 
         const sock = io(WS_URL, {
           auth: { token },
@@ -657,24 +666,80 @@ export function useMediasoup({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const toggleAudio = useCallback(() => {
+  const toggleAudio = useCallback(async () => {
     const producer = producersRef.current.get('audio');
-    if (producer) {
-      if (audioEnabled) producer.pause();
-      else producer.resume();
-      setAudioEnabled(!audioEnabled);
-      socketRef.current?.emit('mediaState', { audio: !audioEnabled, video: videoEnabled });
+    if (!producer) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const track = stream.getAudioTracks()[0];
+        if (track && sendTransportRef.current) {
+          if (localStreamRef.current) {
+            localStreamRef.current.addTrack(track);
+          } else {
+            localStreamRef.current = new MediaStream([track]);
+            setLocalStream(localStreamRef.current);
+          }
+          const newProducer = await sendTransportRef.current.produce({
+            track,
+            appData: { source: 'audio' }
+          });
+          producersRef.current.set('audio', newProducer);
+          setAudioEnabled(true);
+          socketRef.current?.emit('mediaState', { audio: true, video: videoEnabled });
+        }
+      } catch (err) {
+        console.warn('[mediasoup] Failed to start microphone on-demand:', err);
+      }
+      return;
+    }
+
+    if (audioEnabled) {
+      producer.pause();
+      setAudioEnabled(false);
+      socketRef.current?.emit('mediaState', { audio: false, video: videoEnabled });
+    } else {
+      producer.resume();
+      setAudioEnabled(true);
+      socketRef.current?.emit('mediaState', { audio: true, video: videoEnabled });
     }
   }, [audioEnabled, videoEnabled]);
 
-  const toggleVideo = useCallback(() => {
+  const toggleVideo = useCallback(async () => {
     if (screenSharing) return;
     const producer = producersRef.current.get('video');
-    if (producer) {
-      if (videoEnabled) producer.pause();
-      else producer.resume();
-      setVideoEnabled(!videoEnabled);
-      socketRef.current?.emit('mediaState', { audio: audioEnabled, video: !videoEnabled });
+    if (!producer) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const track = stream.getVideoTracks()[0];
+        if (track && sendTransportRef.current) {
+          if (localStreamRef.current) {
+            localStreamRef.current.addTrack(track);
+          } else {
+            localStreamRef.current = new MediaStream([track]);
+            setLocalStream(localStreamRef.current);
+          }
+          const newProducer = await sendTransportRef.current.produce({
+            track,
+            appData: { source: 'camera' }
+          });
+          producersRef.current.set('video', newProducer);
+          setVideoEnabled(true);
+          socketRef.current?.emit('mediaState', { audio: audioEnabled, video: true });
+        }
+      } catch (err) {
+        console.warn('[mediasoup] Failed to start camera on-demand:', err);
+      }
+      return;
+    }
+
+    if (videoEnabled) {
+      producer.pause();
+      setVideoEnabled(false);
+      socketRef.current?.emit('mediaState', { audio: audioEnabled, video: false });
+    } else {
+      producer.resume();
+      setVideoEnabled(true);
+      socketRef.current?.emit('mediaState', { audio: audioEnabled, video: true });
     }
   }, [audioEnabled, videoEnabled, screenSharing]);
 

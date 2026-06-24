@@ -11,9 +11,17 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "typeRoots": ["./node_modules/@types", "../node_modules/@types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "../node_modules/@types"
+    ],
     "noEmitOnError": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

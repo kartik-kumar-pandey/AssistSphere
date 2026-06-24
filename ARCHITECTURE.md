@@ -25,9 +25,9 @@ flowchart TB
     Services[Session / Recording / User Services]
   end
 
-  subgraph data [Persistence]
+  subgraph data [Persistence & Storage]
   PG[(PostgreSQL / Neon)]
-  Files[Uploads + Recordings]
+  OCI[(Oracle Object Storage)]
   end
 
   Agent --> Pages
@@ -41,7 +41,7 @@ flowchart TB
   Socket --> MS
   Socket --> Services
   Services --> PG
-  API --> Files
+  API --> OCI
   MS -.->|RTP/DTLS| Agent
   MS -.->|RTP/DTLS| Customer
 ```
@@ -130,6 +130,9 @@ Screen share uses a **separate mediasoup producer** (`appData.source: screen`). 
 - Post-call summary page with transcript + recording download
 - Dark/Light theme professional UI utilizing native CSS variables
 - Robust session persistence with PM2 ensuring zero-downtime server restarts
+- Smart Remote Pointer ("Look Here") for real-time visual alignment during screen shares
+- Live Canvas Annotations & drawings over shared screens
+- Secure, server-side OCI Object Storage file uploads and media delivery
 
 ## Security Notes
 
@@ -138,6 +141,7 @@ Screen share uses a **separate mediasoup producer** (`appData.source: screen`). 
 - File upload type whitelist + size limits
 - Rate limiting on API (`100 req/min`)
 - Session access checks on messages/recordings
+- AES-256-GCM on-the-fly encryption and decryption pipeline for all stored call recordings
 
 ## Environment
 
@@ -154,7 +158,6 @@ ADMIN_PASSWORD=admin123
 ## Known Limitations
 
 - Recording is client-side composite (agent browser), not server-side FFmpeg
-- No TURN server configured (depends on standard SFU NAT traversal)
 
 ## Demo Credentials
 

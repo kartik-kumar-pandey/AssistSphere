@@ -340,6 +340,14 @@ function registerMediaHandlers(
   socket.on('caption', (caption: { peerId: string; name: string; text: string; isFinal: boolean }) => {
     socket.to(sessionId).emit('peer:caption', caption);
   });
+
+  socket.on('pointer:click', ({ x, y }: { x: number; y: number }) => {
+    socket.to(sessionId).emit('peer:pointer:click', { peerId, x, y });
+  });
+
+  socket.on('annotation:draw', (data: any) => {
+    socket.to(sessionId).emit('peer:annotation:draw', { ...data, peerId });
+  });
 }
 
 function registerChatHandlers(io: Server, socket: Socket, sessionId: string, peerId: string, user: JwtPayload) {
