@@ -431,10 +431,7 @@ export default function HomePage() {
             <h4 className="font-bold text-xs uppercase tracking-wider text-[var(--color-text)] mb-4">Project</h4>
             <ul className="space-y-2">
               <li>
-                <Link href="https://github.com/kartik-kumar-pandey/AtomQuest-Hackathon-finale" target="_blank" className="text-muted hover:text-indigo-500 transition-colors">GitHub Repository</Link>
-              </li>
-              <li>
-                <span className="text-muted opacity-50">AtomQuest Hackathon 1.0</span>
+                <Link href="https://github.com/kartik-kumar-pandey/AssistSphere" target="_blank" className="text-muted hover:text-indigo-500 transition-colors">GitHub Repository</Link>
               </li>
             </ul>
           </div>
