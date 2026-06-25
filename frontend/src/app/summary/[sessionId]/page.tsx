@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Clock, Download, FileText, Loader2, MessageSquare, Users, Video, Sparkles
+  ArrowLeft, Clock, Download, FileText, Loader2, MessageSquare, Mic, Users, Video, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { apiFetch, loadAuth, clearAuth, API_URL } from '@/lib/utils';
@@ -23,7 +23,7 @@ interface SessionHistory {
   startedAt: string;
   endedAt: string | null;
   participants: { name: string; role: string; joinedAt: string; leftAt: string | null }[];
-  messages: { senderName: string; text: string; createdAt: string; fileUrl?: string; fileName?: string }[];
+  messages: { senderName: string; text: string; createdAt: string; fileUrl?: string; fileName?: string; fileMime?: string }[];
   recordings: { id: string; status: string; startedAt: string; endedAt: string | null; fileUrl?: string }[];
   events: { type: string; createdAt: string }[];
 }
@@ -35,6 +35,7 @@ export default function SummaryPage() {
   const [auth, setAuth] = useState<AuthData | null>(null);
   const [session, setSession] = useState<SessionHistory | null>(null);
   const [summaryData, setSummaryData] = useState<{ summary: string; actionItems: string[] } | null>(null);
+  const [messages, setMessages] = useState<SessionHistory['messages']>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,11 +55,17 @@ export default function SummaryPage() {
 
     Promise.all([
       apiFetch<SessionHistory>(`/sessions/${sessionId}`, {}, data.token),
-      apiFetch<{ summary: string; actionItems: string[] }>(`/sessions/${sessionId}/summary`, {}, data.token).catch(() => null)
+      apiFetch<{ summary: string; actionItems: string[] }>(`/sessions/${sessionId}/summary`, {}, data.token).catch(() => null),
+      apiFetch<SessionHistory['messages']>(`/sessions/${sessionId}/messages`, {}, data.token).catch(() => null),
     ])
-      .then(([historyRes, summaryRes]) => {
+      .then(([historyRes, summaryRes, messagesRes]) => {
         setSession(historyRes);
         if (summaryRes) setSummaryData(summaryRes);
+        // Use dedicated messages endpoint for most up-to-date data
+        const allMessages = messagesRes && messagesRes.length > 0
+          ? messagesRes
+          : (historyRes?.messages ?? []);
+        setMessages(allMessages);
       })
       .catch(() => router.replace('/'))
       .finally(() => setLoading(false));
@@ -121,7 +128,7 @@ export default function SummaryPage() {
 
           <div className="grid sm:grid-cols-3 gap-4">
             <Stat icon={Users} label="Participants" value={String(session.participants.length)} />
-            <Stat icon={MessageSquare} label="Messages" value={String(session.messages.length)} />
+            <Stat icon={MessageSquare} label="Messages" value={String(messages.length)} />
             <Stat icon={Clock} label="Status" value={session.status} />
           </div>
         </div>
@@ -203,30 +210,61 @@ export default function SummaryPage() {
           <h2 className="font-semibold text-[var(--color-text)] mb-4 flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-indigo-500" />
             Chat transcript
+            <span className="ml-auto text-xs text-[var(--color-text-muted)] font-normal flex items-center gap-2">
+              <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> chat</span>
+              <span className="flex items-center gap-1"><Mic className="w-3 h-3 text-violet-400" /> voice</span>
+            </span>
           </h2>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {session.messages.length === 0 ? (
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {messages.length === 0 ? (
               <p className="text-slate-500 text-sm">No messages in this session.</p>
             ) : (
-              session.messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className="bg-[var(--color-surface-muted)] rounded-lg px-3 py-2 text-sm border border-[var(--color-border)]"
-                >
-                  <span className="text-indigo-500 font-medium">{msg.senderName}: </span>
-                  <span className="text-[var(--color-text)]">{msg.text}</span>
-                  {msg.fileUrl && (
-                    <a
-                      href={`${API_URL.replace('/api', '')}${msg.fileUrl}`}
-                      className="block text-xs text-indigo-500 underline mt-1"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {msg.fileName || 'Attachment'}
-                    </a>
-                  )}
-                </div>
-              ))
+              messages.map((msg, i) => {
+                const isTranscript = (msg as any).fileMime === 'transcript';
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-lg px-3 py-2 text-sm border ${
+                      isTranscript
+                        ? 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-100 dark:border-violet-900/40'
+                        : 'bg-[var(--color-surface-muted)] border-[var(--color-border)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {isTranscript ? (
+                        <Mic className="w-3 h-3 text-violet-500 shrink-0" />
+                      ) : (
+                        <MessageSquare className="w-3 h-3 text-indigo-500 shrink-0" />
+                      )}
+                      <span className={`font-semibold text-xs ${
+                        isTranscript ? 'text-violet-500' : 'text-indigo-500'
+                      }`}>{msg.senderName}</span>
+                      <span className="text-[var(--color-text-muted)] text-xs">·</span>
+                      <span className="text-[var(--color-text-muted)] text-xs">
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {isTranscript && (
+                        <span className="ml-auto text-[10px] text-violet-400 bg-violet-100 dark:bg-violet-900/40 px-1.5 py-0.5 rounded-full font-medium">
+                          voice
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[var(--color-text)] ${
+                      isTranscript ? 'italic' : ''
+                    }`}>{msg.text}</span>
+                    {msg.fileUrl && (
+                      <a
+                        href={`${API_URL.replace('/api', '')}${msg.fileUrl}`}
+                        className="block text-xs text-indigo-500 underline mt-1"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {msg.fileName || 'Attachment'}
+                      </a>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </section>

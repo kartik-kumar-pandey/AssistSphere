@@ -86,6 +86,11 @@ export function useCaptions(socket: Socket | null, audioEnabled: boolean, ownPee
         if (text.trim() && currentSocket && currentPeerId) {
           const caption: Caption = { peerId: currentPeerId, name: currentName, text, isFinal };
           currentSocket.emit('caption', caption);
+
+          // Persist final transcripts to the database for the summary page
+          if (isFinal && finalTranscript.trim()) {
+            currentSocket.emit('caption:transcript', { text: finalTranscript.trim() });
+          }
           
           setCaptions((prev) => {
             const filtered = prev.filter((c) => c.peerId !== currentPeerId || c.isFinal);

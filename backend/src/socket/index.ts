@@ -392,6 +392,25 @@ function registerChatHandlers(io: Server, socket: Socket, sessionId: string, pee
     }
   });
 
+  // Save final speech-recognition transcripts to the DB so they appear in the summary
+  socket.on('caption:transcript', async ({ text }: { text: string }) => {
+    if (!text?.trim()) return;
+    try {
+      await prisma.message.create({
+        data: {
+          sessionId,
+          senderName: user.name,
+          senderRole: user.role,
+          text: text.trim(),
+          fileMime: 'transcript', // marker to distinguish from typed chat
+        },
+      });
+    } catch {
+      // Don't surface transcript save errors to the user
+      incrementErrors();
+    }
+  });
+
   socket.on('whiteboard:get', async (...args: unknown[]) => {
     const cb = getAck(args);
     try {

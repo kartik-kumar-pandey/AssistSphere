@@ -373,16 +373,16 @@ export function VideoStage({
 
   if (presentation) {
     return (
-      <div className="h-full w-full flex gap-2 p-2 min-h-0">
-        <div className="flex-[3] min-w-0 min-h-0 relative rounded-2xl overflow-hidden bg-slate-900 shadow-md ring-1 ring-slate-200/60">
+      <div className="h-full w-full flex flex-col sm:flex-row gap-2 p-2 min-h-0">
+        <div className="flex-[3] min-w-0 min-h-[280px] sm:min-h-0 relative rounded-2xl overflow-hidden bg-slate-900 shadow-md ring-1 ring-slate-200/60">
           <PresentationView presentation={presentation} socket={socket} role={role} />
         </div>
-        <div className="flex-[1] min-w-0 flex flex-col gap-2 overflow-y-auto min-h-0">
+        <div className="w-full sm:w-1/4 sm:flex-[1] min-w-0 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto min-h-0 h-28 sm:h-auto shrink-0">
           {tiles.map((tile) => (
             <TileWrapper
               key={tile.peerId}
               tile={tile}
-              className="w-full aspect-video shrink-0"
+              className="w-36 sm:w-full aspect-video shrink-0"
               onMaximize={onMaximize}
             />
           ))}
@@ -401,9 +401,9 @@ export function VideoStage({
 
   if (count === 2) {
     return (
-      <div className="h-full w-full grid grid-cols-2 gap-2 p-2 min-h-0">
+      <div className="h-full w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 min-h-0 overflow-y-auto sm:overflow-visible">
         {tiles.map((tile) => (
-          <TileWrapper key={tile.peerId} tile={tile} className="h-full min-h-[200px]" onMaximize={onMaximize} />
+          <TileWrapper key={tile.peerId} tile={tile} className="h-full min-h-[180px] sm:min-h-[200px]" onMaximize={onMaximize} />
         ))}
       </div>
     );
@@ -411,37 +411,37 @@ export function VideoStage({
 
   if (count === 3 && localTile) {
     return (
-      <div className="h-full w-full grid grid-cols-2 gap-2 p-2 min-h-0">
-        <TileWrapper tile={localTile} className="h-full min-h-[240px]" onMaximize={onMaximize} />
-        <div className="flex flex-col gap-2 min-h-0 h-full">
-          {remoteTiles.map((tile) => (
-            <TileWrapper key={tile.peerId} tile={tile} className="flex-1 min-h-0" onMaximize={onMaximize} />
-          ))}
-        </div>
+      <div className="h-full w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 min-h-0 overflow-y-auto sm:overflow-visible">
+        <TileWrapper tile={localTile} className="h-full min-h-[200px] sm:min-h-[240px] sm:col-span-2" onMaximize={onMaximize} />
+        {remoteTiles.map((tile) => (
+          <TileWrapper key={tile.peerId} tile={tile} className="h-full min-h-[180px]" onMaximize={onMaximize} />
+        ))}
       </div>
     );
   }
 
   if (count === 3) {
     return (
-      <div className="h-full w-full grid grid-rows-2 gap-2 p-2 min-h-0">
-        <TileWrapper tile={tiles[0]} className="h-full" onMaximize={onMaximize} />
-        <div className="grid grid-cols-2 gap-2 min-h-0">
-          {tiles.slice(1).map((tile) => (
-            <TileWrapper key={tile.peerId} tile={tile} className="h-full" onMaximize={onMaximize} />
-          ))}
-        </div>
+      <div className="h-full w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 min-h-0 overflow-y-auto sm:overflow-visible">
+        {tiles.map((tile, i) => (
+          <TileWrapper
+            key={tile.peerId}
+            tile={tile}
+            className={cn("h-full min-h-[180px]", i === 0 && "sm:col-span-2")}
+            onMaximize={onMaximize}
+          />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="h-full w-full grid grid-cols-2 grid-rows-2 gap-2 p-2 min-h-0">
+    <div className="h-full w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 min-h-0 overflow-y-auto">
       {tiles.slice(0, 4).map((tile) => (
         <TileWrapper key={tile.peerId} tile={tile} className="h-full min-h-[160px]" onMaximize={onMaximize} />
       ))}
       {tiles.length > 4 && (
-        <div className="col-span-2 text-center text-sm text-slate-500 py-1">
+        <div className="col-span-1 sm:col-span-2 text-center text-sm text-slate-500 py-1">
           +{tiles.length - 4} more participants
         </div>
       )}

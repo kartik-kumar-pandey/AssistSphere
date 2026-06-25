@@ -3,7 +3,7 @@ const nextConfig = {
   // WebRTC + Socket.io: avoid double-mount tearing down active connections
   reactStrictMode: false,
   experimental: {
-    optimizePackageImports: ['lucide-react', 'recharts', '@excalidraw/excalidraw'],
+    optimizePackageImports: ['lucide-react', 'recharts'],
   },
   // Fix for OneDrive/Windows symlink and diagnostics issues
   onDemandEntries: {

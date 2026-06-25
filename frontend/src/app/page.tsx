@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import {
   Video, Shield, MessageSquare, ArrowRight, Radio, Users, Clock,
-  Zap, CheckCircle2, X, Sparkles, Smile, Code, HelpCircle, HardDrive, BarChart3
+  Zap, CheckCircle2, X, Sparkles, Smile, Code, HelpCircle, HardDrive, BarChart3, Menu
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -17,6 +17,7 @@ export default function HomePage() {
   const [showKicked, setShowKicked] = useState(false);
   const [activeTab, setActiveTab] = useState<'video' | 'screenshare' | 'summary' | 'observability'>('video');
   const [floatingStickers, setFloatingStickers] = useState<FloatingStickerItem[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('kicked')) {
@@ -56,7 +57,9 @@ export default function HomePage() {
             <div className="animate-fade-up">
               <BrandLogo />
             </div>
-            <div className="flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
+            
+            {/* Desktop Navigation */}
+            <div className="hidden sm:flex items-center gap-2 animate-fade-up animate-fade-up-delay-1">
               <ThemeToggle />
               <Link href="/admin">
                 <Button variant="ghost" size="sm">Admin</Button>
@@ -68,7 +71,34 @@ export default function HomePage() {
                 <Button size="sm" className="btn-primary">Start session</Button>
               </Link>
             </div>
+
+            {/* Mobile Navigation Trigger */}
+            <div className="flex sm:hidden items-center gap-2 animate-fade-up animate-fade-up-delay-1">
+              <ThemeToggle />
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-muted)] transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
+
+          {/* Mobile Navigation Panel */}
+          {isMobileMenuOpen && (
+            <div className="sm:hidden border-t border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4 space-y-3 animate-fade-up">
+              <Link href="/admin" onClick={() => setIsMobileMenuOpen(false)} className="block w-full">
+                <Button variant="ghost" className="w-full justify-start text-sm h-10">Admin Dashboard</Button>
+              </Link>
+              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block w-full">
+                <Button variant="ghost" className="w-full justify-start text-sm h-10">Sign in</Button>
+              </Link>
+              <Link href="/agent" onClick={() => setIsMobileMenuOpen(false)} className="block w-full">
+                <Button className="w-full btn-primary justify-center text-sm h-10">Start session</Button>
+              </Link>
+            </div>
+          )}
         </nav>
 
         <main className="max-w-6xl mx-auto px-6">
@@ -156,7 +186,7 @@ export default function HomePage() {
                   <button
                     key={t.id}
                     onClick={() => setActiveTab(t.id as any)}
-                    className={`flex items-center gap-3 p-4 rounded-xl text-left transition-all duration-300 border ${
+                    className={`flex items-center gap-3 p-4 rounded-xl text-left transition-all duration-300 border flex-shrink-0 ${
                       activeTab === t.id 
                         ? 'bg-indigo-500/10 border-indigo-500 text-indigo-600 dark:text-indigo-400 font-semibold shadow-sm'
                         : 'bg-[var(--color-surface)] border-[var(--color-border)] hover:bg-slate-50 dark:hover:bg-slate-900/50 text-muted'
@@ -179,26 +209,26 @@ export default function HomePage() {
                       <h3 className="font-bold text-sm">Interactive Grid Simulator</h3>
                       <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full font-bold">2 Connected</span>
                     </div>
-                    <div className="grid sm:grid-cols-2 gap-4 h-64">
-                      <div className="rounded-xl bg-slate-900 flex flex-col justify-between p-4 relative overflow-hidden border-2 border-indigo-500 animate-speaker-wave">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-auto sm:h-64">
+                      <div className="rounded-xl bg-slate-900 flex flex-col justify-between p-4 relative overflow-hidden border-2 border-indigo-500 animate-speaker-wave h-32 sm:h-auto">
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                         <div className="z-10 flex justify-between items-center">
                           <span className="text-xs bg-slate-800/80 text-white px-2 py-0.5 rounded-full backdrop-blur-md">Agent Kartik</span>
                           <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
                         </div>
-                        <div className="z-10 text-center text-xs text-white/50 py-10">
+                        <div className="z-10 text-center text-xs text-white/50 py-4 sm:py-10">
                           Camera Active (mediasoup Consumer)
                         </div>
                         <div className="z-10 flex justify-between items-center text-xs text-white">
                           <span>Speaking...</span>
                         </div>
                       </div>
-                      <div className="rounded-xl bg-slate-900 flex flex-col justify-between p-4 relative overflow-hidden">
+                      <div className="rounded-xl bg-slate-900 flex flex-col justify-between p-4 relative overflow-hidden h-32 sm:h-auto">
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                         <div className="z-10 flex justify-between items-center">
                           <span className="text-xs bg-slate-800/80 text-white px-2 py-0.5 rounded-full backdrop-blur-md">Customer Support</span>
                         </div>
-                        <div className="z-10 text-center text-xs text-white/50 py-10">
+                        <div className="z-10 text-center text-xs text-white/50 py-4 sm:py-10">
                           Remote Stream (mediasoup Producer)
                         </div>
                         <div className="z-10 text-xs text-white">
@@ -215,19 +245,19 @@ export default function HomePage() {
                       <h3 className="font-bold text-sm">Presentation Stage (75% / 25% Split Screen)</h3>
                       <span className="text-[10px] uppercase font-mono px-2 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 rounded-full font-bold">Screen Share Active</span>
                     </div>
-                    <div className="flex gap-4 h-64">
+                    <div className="flex flex-col sm:flex-row gap-4 h-auto sm:h-64">
                       {/* 75% stage */}
-                      <div className="flex-1 rounded-xl bg-indigo-950 flex flex-col justify-between p-4 border border-indigo-500/30">
-                        <div className="text-center text-xs text-indigo-200/60 py-12 flex flex-col items-center gap-2">
+                      <div className="flex-1 rounded-xl bg-indigo-950 flex flex-col justify-between p-4 border border-indigo-500/30 min-h-[160px] sm:min-h-0">
+                        <div className="text-center text-xs text-indigo-200/60 py-8 sm:py-12 flex flex-col items-center gap-2">
                           <Code className="w-10 h-10 text-indigo-400" />
                           <span>Screen Share stream from Agent browser</span>
                         </div>
                         <span className="text-xs bg-black/40 text-white px-2 py-0.5 rounded-full w-fit">Kartik&apos;s Screen</span>
                       </div>
                       {/* 25% sidebar */}
-                      <div className="w-1/4 flex flex-col gap-2">
-                        <div className="flex-1 rounded-xl bg-slate-900 p-2 text-center text-[10px] text-white/50 flex items-center justify-center border border-white/10">Agent Video</div>
-                        <div className="flex-1 rounded-xl bg-slate-900 p-2 text-center text-[10px] text-white/50 flex items-center justify-center border border-white/10">User Camera</div>
+                      <div className="w-full sm:w-1/4 flex flex-row sm:flex-col gap-2 h-16 sm:h-auto">
+                        <div className="flex-1 rounded-xl bg-slate-900 p-2 text-center text-[10px] text-white/50 flex items-center justify-center border border-white/10 min-h-0">Agent Video</div>
+                        <div className="flex-1 rounded-xl bg-slate-900 p-2 text-center text-[10px] text-white/50 flex items-center justify-center border border-white/10 min-h-0">User Camera</div>
                       </div>
                     </div>
                   </div>

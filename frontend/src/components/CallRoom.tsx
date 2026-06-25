@@ -492,7 +492,7 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
 
             {/* Captions Overlay */}
             <div className="absolute bottom-6 left-0 right-0 pointer-events-none flex flex-col items-center gap-1.5 z-20 px-4">
-              {!captionsSupported && (
+              {!captionsSupported && typeof navigator !== 'undefined' && !/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && (
                 <div className="bg-amber-600/90 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md pointer-events-auto">
                   Live captions are not supported in this browser (Chrome, Safari, or Edge recommended).
                 </div>
@@ -637,7 +637,7 @@ export function CallRoom({ sessionId, token, name, role, inviteLink: inviteLinkP
 
         {/* Chat sidebar */}
         {chatOpen && (
-          <aside className="w-full sm:w-80 lg:w-96 bg-[var(--color-surface)] border-l border-[var(--color-border)] flex flex-col shrink-0">
+          <aside className="fixed inset-y-0 right-0 z-50 w-full sm:relative sm:z-auto sm:w-80 lg:w-96 bg-[var(--color-surface)] border-l border-[var(--color-border)] flex flex-col shrink-0 shadow-2xl sm:shadow-none">
             <div className="flex border-b border-[var(--color-border)]">
               <button
                 onClick={() => setSideTab('chat')}
